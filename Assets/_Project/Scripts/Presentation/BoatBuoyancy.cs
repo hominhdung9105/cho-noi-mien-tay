@@ -4,7 +4,7 @@
  *              lên bằng mô hình lò xo–giảm chấn (Archimedes đơn giản). Khi thủy triều hạ, ghe hạ
  *              theo; khi nước xuống dưới đáy sông, Collider đáy chặn lại -> ghe mắc cạn (grounded).
  *              Ghe cần bật Use Gravity để có thể lắng xuống chạm đáy.
- * [Dependencies]: Rigidbody; Transform mặt nước (do EnvironmentController điều khiển Y).
+ * [Dependencies]: Rigidbody; Transform mặt nước (do TideController điều khiển Y theo thủy triều).
  */
 
 using UnityEngine;
@@ -15,7 +15,7 @@ namespace ChoNoi.Presentation
     public class BoatBuoyancy : MonoBehaviour
     {
         [Header("Tham chiếu mặt nước")]
-        // Cùng Transform mà EnvironmentController dịch chuyển trục Y theo thủy triều.
+        // Cùng Transform mà TideController dịch chuyển trục Y theo thủy triều.
         [SerializeField] private Transform waterSurface;
 
         [Header("Thông số nổi")]

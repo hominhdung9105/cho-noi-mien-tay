@@ -44,7 +44,7 @@ namespace ChoNoiMienTay.Editor
 
             BoatUpgradeCatalogSO upgradeCatalog = EnsureUpgradeCatalog();
             MarketNewsDatabaseSO newsDatabase = EnsureNewsDatabase();
-            EnvironmentProfileSO environmentProfile = EnsureEnvironmentProfile();
+            AtmosphericProfileSO environmentProfile = EnsureEnvironmentProfile();
             BoatStats boatStats = EnsureBoatStats();
             List<ItemData> marketItems = LoadMarketItems();
 
@@ -60,9 +60,13 @@ namespace ChoNoiMienTay.Editor
             BuildRiverLife(worldRoot.transform);
             BuildEnvironmentAssets(worldRoot.transform, terrain);
             BuildAmbientNpcCrowd(worldRoot.transform, terrain);
+            BuildStiltHouses(worldRoot.transform, terrain);
+            BuildFloatingMarketCrowd(worldRoot.transform);
 
             GameObject systemsRoot = new GameObject("GameSystems");
             TimeManager timeManager = systemsRoot.AddComponent<TimeManager>();
+            // Mở scene vào ~6h sáng: bình minh sương ấm, nắng nghiêng — khớp ảnh chợ nổi.
+            SetPrivate(timeManager, "startHour", 6f);
             PlayerStats playerStats = systemsRoot.AddComponent<PlayerStats>();
             InventoryManager inventoryManager = systemsRoot.AddComponent<InventoryManager>();
             EconomyManager economyManager = systemsRoot.AddComponent<EconomyManager>();
@@ -85,11 +89,23 @@ namespace ChoNoiMienTay.Editor
             SetupBoatVisualModules(boatCampManager, boat.transform);
             SetupBoardingFlow(shorePlayer, boat, followCamera);
 
-            EnvironmentController environmentController = systemsRoot.AddComponent<EnvironmentController>();
-            environmentController.GetType().GetField("timeManager", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(environmentController, timeManager);
-            environmentController.GetType().GetField("profile", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(environmentController, environmentProfile);
-            environmentController.GetType().GetField("directionalLight", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(environmentController, Object.FindAnyObjectByType<Light>());
-            environmentController.GetType().GetField("waterTransform", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(environmentController, waterPlane.transform);
+            // AtmosphereSkyBridge: nội suy ánh sáng/sương mù/ambient/màu nước theo giờ (thay EnvironmentController).
+            AtmosphereSkyBridge skyBridge = systemsRoot.AddComponent<AtmosphereSkyBridge>();
+            SetPrivate(skyBridge, "timeManager", timeManager);
+            SetPrivate(skyBridge, "profile", environmentProfile);
+            SetPrivate(skyBridge, "directionalLight", Object.FindAnyObjectByType<Light>());
+            SetPrivate(skyBridge, "waterRenderer", waterPlane.GetComponent<Renderer>());
+
+            // TideController sở hữu mực nước (water-Y) + bãi cạn động (mudflat colliders).
+            TideController tideController = systemsRoot.AddComponent<TideController>();
+            tideController.GetType().GetField("timeManager", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(tideController, timeManager);
+            tideController.GetType().GetField("profile", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(tideController, environmentProfile);
+            tideController.GetType().GetField("waterTransform", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(tideController, waterPlane.transform);
+
+            // Bãi cạn động: collider bãi bùn ngầm bật khi nước rút dưới ngưỡng (Thuỷ triều - Phase 3).
+            Collider[] mudflats = BuildMudflats(worldRoot.transform);
+            SetPrivate(tideController, "mudflatColliders", mudflats);
+            SetPrivate(tideController, "groundingThreshold", 2.5f);
 
             marketNewsController.Configure(timeManager, newsDatabase);
             ConfigureSaveLoad(saveLoadManager, playerStats, inventoryManager, boatCampManager, bambooPoleManager, durabilityManager, timeManager, marketItems);
@@ -97,8 +113,17 @@ namespace ChoNoiMienTay.Editor
             RiverMarketHUD hud = systemsRoot.AddComponent<RiverMarketHUD>();
             hud.Configure(timeManager, playerStats, inventoryManager, boatCampManager, marketNewsController, economyManager, durabilityManager, marketItems);
 
+            // UI Môi trường: panel hiển thị giờ/phase/thuỷ triều/sương mù + nhiên liệu/thể lực + nút tốc độ thời gian.
+            EnvironmentHUD environmentHud = systemsRoot.AddComponent<EnvironmentHUD>();
+            environmentHud.Configure(timeManager, environmentProfile, boatStats, playerStats);
+
             Selection.activeGameObject = worldRoot;
             EditorSceneManager.SaveScene(scene, ScenePath);
+
+            // Đặt RiverMarketScene làm scene 0 trong Build Settings + để là scene active
+            // -> mở Unity lên là thấy ngay môi trường chợ nổi.
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
         }
@@ -192,16 +217,20 @@ namespace ChoNoiMienTay.Editor
             return database;
         }
 
-        private static EnvironmentProfileSO EnsureEnvironmentProfile()
+        private static AtmosphericProfileSO EnsureEnvironmentProfile()
         {
-            EnvironmentProfileSO profile = AssetDatabase.LoadAssetAtPath<EnvironmentProfileSO>(EnvironmentProfilePath);
+            AtmosphericProfileSO profile = AssetDatabase.LoadAssetAtPath<AtmosphericProfileSO>(EnvironmentProfilePath);
             if (profile == null)
             {
-                profile = ScriptableObject.CreateInstance<EnvironmentProfileSO>();
+                profile = ScriptableObject.CreateInstance<AtmosphericProfileSO>();
                 AssetDatabase.CreateAsset(profile, EnvironmentProfilePath);
             }
 
-            SetPrivate(profile, "lightColorOverDay", BuildGradient());
+            // Màu nắng (Sun): đêm xanh lạnh -> bình minh cam ấm -> trưa trắng ấm -> hoàng hôn cam rực.
+            SetPrivate(profile, "lightColorOverDay", BuildColorGradient(
+                new Color(0.30f, 0.38f, 0.55f), new Color(1.00f, 0.80f, 0.58f),
+                new Color(1.00f, 0.96f, 0.88f), new Color(1.00f, 0.62f, 0.34f),
+                new Color(0.30f, 0.38f, 0.55f)));
             SetPrivate(profile, "lightIntensityOverDay", AnimationCurve.EaseInOut(0f, 0.25f, 1f, 1.1f));
             SetPrivate(profile, "sunPitchOverDay", new AnimationCurve(
                 new Keyframe(0f, -20f),
@@ -209,12 +238,15 @@ namespace ChoNoiMienTay.Editor
                 new Keyframe(0.5f, 70f),
                 new Keyframe(0.75f, 15f),
                 new Keyframe(1f, -30f)));
+            // Sương mù: DÀY lúc bình minh (~5-6h, t≈0.21-0.25 = 0.05), tan dần về trưa, ám nhẹ chiều/tối.
             SetPrivate(profile, "fogDensityOverDay", new AnimationCurve(
-                new Keyframe(0f, 0.035f),
-                new Keyframe(0.25f, 0.02f),
-                new Keyframe(0.5f, 0.006f),
-                new Keyframe(0.75f, 0.018f),
-                new Keyframe(1f, 0.04f)));
+                new Keyframe(0.125f, 0.045f),  // 03h
+                new Keyframe(0.21f, 0.05f),    // 05h sương dày nhất
+                new Keyframe(0.25f, 0.045f),   // 06h (lúc mở scene)
+                new Keyframe(0.42f, 0.012f),   // 10h
+                new Keyframe(0.5f, 0.004f),    // 12h trong
+                new Keyframe(0.75f, 0.02f),    // 18h chiều
+                new Keyframe(1f, 0.035f)));
             SetPrivate(profile, "maxWaterHeight", 4f);
             SetPrivate(profile, "minWaterHeight", 1.6f);
             SetPrivate(profile, "waterLevelOverDay", new AnimationCurve(
@@ -224,8 +256,55 @@ namespace ChoNoiMienTay.Editor
                 new Keyframe(0.75f, 0.15f),
                 new Keyframe(1f, 1f)));
 
+            // --- Khí quyển mở rộng cho AtmosphereSkyBridge (màu sắc miền Tây) ---
+            // Cường độ nắng: đỉnh ~1.5 lúc trưa, ~0.2 lúc 18h, tối về 0.
+            SetPrivate(profile, "sunIntensityCurve", new AnimationCurve(
+                new Keyframe(0.125f, 0.05f),   // 03h
+                new Keyframe(0.21f, 0.45f),    // 05h bình minh
+                new Keyframe(0.5f, 1.5f),      // 12h trưa gắt
+                new Keyframe(0.71f, 0.55f),    // 17h
+                new Keyframe(0.79f, 0.12f),    // 19h
+                new Keyframe(1f, 0.0f)));
+            // Vòm trời: đêm xanh thẫm -> bình minh ĐÀO hồng-cam -> trưa xanh ấm -> hoàng hôn cam rực.
+            SetPrivate(profile, "skyColorGradient", BuildColorGradient(
+                new Color(0.12f, 0.16f, 0.28f), new Color(0.98f, 0.80f, 0.66f),
+                new Color(0.55f, 0.70f, 0.88f), new Color(0.97f, 0.52f, 0.28f),
+                new Color(0.12f, 0.16f, 0.28f)));
+            // Chân trời/ambient equator: tông ấm phù sa.
+            SetPrivate(profile, "equatorColorGradient", BuildColorGradient(
+                new Color(0.20f, 0.22f, 0.28f), new Color(0.90f, 0.70f, 0.52f),
+                new Color(0.74f, 0.72f, 0.64f), new Color(0.88f, 0.56f, 0.34f),
+                new Color(0.20f, 0.22f, 0.28f)));
+            // Sương mù: bình minh KEM ẤM (nắng xuyên sương), trưa nhạt, hoàng hôn ám cam.
+            SetPrivate(profile, "fogColorGradient", BuildColorGradient(
+                new Color(0.70f, 0.72f, 0.74f), new Color(0.95f, 0.88f, 0.80f),
+                new Color(0.85f, 0.88f, 0.90f), new Color(0.93f, 0.70f, 0.50f),
+                new Color(0.55f, 0.58f, 0.64f)));
+            // Nước phù sa nâu đục (~#8B5A2B) đổi theo góc sáng: bình minh nâu ấm -> trưa nâu olive -> chiều nâu cam.
+            SetPrivate(profile, "waterColorGradient", BuildColorGradient(
+                new Color(0.34f, 0.28f, 0.18f), new Color(0.40f, 0.33f, 0.20f),
+                new Color(0.47f, 0.39f, 0.22f), new Color(0.45f, 0.30f, 0.17f),
+                new Color(0.30f, 0.25f, 0.16f)));
+
             EditorUtility.SetDirty(profile);
             return profile;
+        }
+
+        // Tạo Gradient 5 mốc đều (0/0.25/0.5/0.75/1) — alpha = 1.
+        private static Gradient BuildColorGradient(Color night, Color dawn, Color noon, Color dusk, Color lateNight)
+        {
+            Gradient gradient = new Gradient();
+            gradient.SetKeys(
+                new[]
+                {
+                    new GradientColorKey(night, 0f),
+                    new GradientColorKey(dawn, 0.25f),
+                    new GradientColorKey(noon, 0.5f),
+                    new GradientColorKey(dusk, 0.75f),
+                    new GradientColorKey(lateNight, 1f)
+                },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+            return gradient;
         }
 
         private static BoatStats EnsureBoatStats()
@@ -467,7 +546,9 @@ namespace ChoNoiMienTay.Editor
 
             Renderer renderer = water.GetComponent<Renderer>();
             Material waterMat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-            waterMat.color = new Color(0.13f, 0.45f, 0.56f, 0.65f);
+            // Nước phù sa nâu đục (~#8B5A2B), ít trong — đúng sông Mekong. AtmosphereSkyBridge sẽ
+            // ghi đè _BaseColor theo giờ qua waterColorGradient (vẫn tông nâu).
+            waterMat.color = new Color(0.42f, 0.34f, 0.18f, 0.92f);
             renderer.sharedMaterial = waterMat;
 
             BoxCollider box = water.GetComponent<BoxCollider>();
@@ -478,6 +559,97 @@ namespace ChoNoiMienTay.Editor
             return water;
         }
 
+        // Rải ghe trái cây chen chúc giữa sông (mỗi ghe có Cây Bẹo treo nông sản) — đúng ảnh chợ nổi.
+        private static void BuildFloatingMarketCrowd(Transform parent)
+        {
+            GameObject crowdRoot = new GameObject("FloatingMarketCrowd");
+            crowdRoot.transform.SetParent(parent);
+            crowdRoot.transform.position = new Vector3(120f, 3.6f, 100f);
+
+            FloatingMarketSpawner spawner = crowdRoot.AddComponent<FloatingMarketSpawner>();
+            SetPrivate(spawner, "boatPrefabs", LoadModels(new[]
+            {
+                "Assets/_Project/Art/model_mau/taubanhang/hủ tiếu/hủ tiếu (1).glb",
+                "Assets/_Project/Art/model_mau/taubanhang/ghe tạp hóa/ghe tạp hóa (1).glb",
+                "Assets/_Project/Art/model_mau/tauchokhach/tauchokhach (1).glb",
+            }));
+            SetPrivate(spawner, "fruitPrefabs", LoadModels(new[]
+            {
+                "Assets/_Project/Art/model_mau/thunghang/khom+cam/khom+cam (1).glb",
+                "Assets/_Project/Art/model_mau/thunghang/duahau+dudu/duahau+dudu (1).glb",
+                "Assets/_Project/Art/model_mau/thunghang/xoai+dua/xoai+dua (1).glb",
+            }));
+            SetPrivate(spawner, "boatCount", 14);
+            SetPrivate(spawner, "areaSize", new Vector3(28f, 0f, 55f));
+            SetPrivate(spawner, "waterY", 3.6f);
+            SetPrivate(spawner, "minSpacing", 4f);
+            SetPrivate(spawner, "spawnOnStart", true);
+        }
+
+        // Nhà sàn gỗ low-poly dọc 2 bờ sông (sàn nâng trên cọc + mái dốc).
+        private static void BuildStiltHouses(Transform parent, Terrain terrain)
+        {
+            GameObject root = new GameObject("StiltHouses");
+            root.transform.SetParent(parent);
+
+            Vector2[] spots =
+            {
+                new Vector2(72f, 96f),
+                new Vector2(168f, 96f),
+                new Vector2(58f, 150f),
+                new Vector2(184f, 150f),
+                new Vector2(120f, 202f),
+            };
+
+            for (int i = 0; i < spots.Length; i++)
+            {
+                float groundY = terrain != null ? terrain.SampleHeight(new Vector3(spots[i].x, 0f, spots[i].y)) : 3f;
+                BuildStiltHouse(root.transform, $"StiltHouse_{i}", new Vector3(spots[i].x, groundY, spots[i].y), (i * 47f) % 360f);
+            }
+        }
+
+        private static void BuildStiltHouse(Transform parent, string name, Vector3 groundPos, float yaw)
+        {
+            GameObject house = new GameObject(name);
+            house.transform.SetParent(parent);
+            house.transform.position = groundPos;
+            house.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            // 4 cọc gỗ nâng sàn nhà lên khỏi mặt nước.
+            float floorY = 2.0f;
+            float[] sx = { -1.4f, 1.4f, -1.4f, 1.4f };
+            float[] sz = { -1.0f, -1.0f, 1.0f, 1.0f };
+            for (int i = 0; i < 4; i++)
+            {
+                GameObject stilt = CreatePrimitiveChild(house.transform, $"Stilt_{i}", PrimitiveType.Cylinder,
+                    new Vector3(sx[i], floorY * 0.5f, sz[i]), new Vector3(0.12f, floorY * 0.5f, 0.12f), new Color(0.34f, 0.24f, 0.14f));
+                stilt.GetComponent<Collider>().enabled = false;
+            }
+
+            // Sàn + thân nhà gỗ.
+            GameObject body = CreatePrimitiveChild(house.transform, "Body", PrimitiveType.Cube,
+                new Vector3(0f, floorY + 0.9f, 0f), new Vector3(3.4f, 1.8f, 2.6f), new Color(0.55f, 0.40f, 0.24f));
+            body.GetComponent<Collider>().enabled = false;
+
+            // Mái dốc (Cube xoay nghiêng) tông ngói/đỏ nâu.
+            GameObject roof = CreatePrimitiveChild(house.transform, "Roof", PrimitiveType.Cube,
+                new Vector3(0f, floorY + 2.05f, 0f), new Vector3(3.9f, 0.18f, 3.1f), new Color(0.62f, 0.28f, 0.18f));
+            roof.transform.localRotation = Quaternion.Euler(14f, 0f, 0f);
+            roof.GetComponent<Collider>().enabled = false;
+        }
+
+        // Nạp danh sách model (.glb/.fbx) theo đường dẫn, bỏ qua cái thiếu.
+        private static GameObject[] LoadModels(string[] paths)
+        {
+            var list = new List<GameObject>();
+            foreach (string path in paths)
+            {
+                GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (model != null) list.Add(model);
+            }
+            return list.ToArray();
+        }
+
         private static void BuildObstacles(Transform parent)
         {
             GameObject obstacles = new GameObject("RiverObstacles");
@@ -486,6 +658,39 @@ namespace ChoNoiMienTay.Editor
             CreateObstacle(obstacles.transform, "HyacinthPatch", PrimitiveType.Sphere, new Vector3(103f, 3.25f, 122f), new Vector3(3f, 0.35f, 2.5f), new Color(0.20f, 0.55f, 0.25f), true);
             CreateObstacle(obstacles.transform, "WoodPost", PrimitiveType.Cylinder, new Vector3(139f, 3.4f, 84f), new Vector3(0.4f, 2.4f, 0.4f), new Color(0.36f, 0.23f, 0.13f), false);
             CreateObstacle(obstacles.transform, "BrokenBoat", PrimitiveType.Cube, new Vector3(73f, 3.35f, 154f), new Vector3(4f, 0.8f, 1.6f), new Color(0.25f, 0.25f, 0.25f), false);
+        }
+
+        // Tạo các bãi bùn ngầm (mudflat) ở nhánh sông nông. Collider tắt sẵn; TideController
+        // sẽ BẬT khi mực nước rút dưới ngưỡng -> ghe chạm đáy, mắc cạn (Test Case 02).
+        // Đặt trên layer 1 (RiverBed) để khớp BoatController.riverbedLayer = 1 << 1.
+        private static Collider[] BuildMudflats(Transform parent)
+        {
+            GameObject mudflatRoot = new GameObject("Mudflats");
+            mudflatRoot.transform.SetParent(parent);
+
+            // Vị trí (x, y, z) tại các nhánh sông nông + gần ngã ba. Y đặt quanh mức nước thấp.
+            Vector3[] spots =
+            {
+                new Vector3(78f,  2.4f, 150f),   // nhánh trái nông
+                new Vector3(162f, 2.4f, 150f),   // nhánh phải nông
+                new Vector3(120f, 2.4f, 104f),   // gần ngã ba
+            };
+
+            List<Collider> colliders = new List<Collider>();
+            for (int i = 0; i < spots.Length; i++)
+            {
+                GameObject mud = new GameObject($"Mudflat_{i}");
+                mud.transform.SetParent(mudflatRoot.transform);
+                mud.transform.position = spots[i];
+                mud.layer = 1; // RiverBed layer
+
+                BoxCollider box = mud.AddComponent<BoxCollider>();
+                box.size = new Vector3(12f, 2.4f, 12f);
+                box.enabled = false; // mặc định tắt, TideController bật khi nước rút
+                colliders.Add(box);
+            }
+
+            return colliders.ToArray();
         }
 
         private static void BuildNpcBoats(Transform parent)

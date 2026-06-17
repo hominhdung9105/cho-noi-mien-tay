@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace ChoNoiMienTay.Presentation
@@ -22,11 +23,18 @@ namespace ChoNoiMienTay.Presentation
         public float CurrentStamina => currentStamina;
         public float MaxStamina => maxStamina;
 
+        /// <summary>
+        /// Bắn ra mỗi khi Thể lực thay đổi. Tham số: (currentStamina, maxStamina).
+        /// UI Dev 2 subscribe để vẽ thanh Thể lực — PlayerStats không đụng UI (tách lớp).
+        /// </summary>
+        public event Action<float, float> OnStaminaChanged;
+
         public void UpgradeMaxStamina(float amount)
         {
             maxStamina += amount;
             currentStamina += amount; // Hồi một lượng bằng lượng mới được cộng
             Debug.Log($"[PlayerStats] Đã nâng cấp Thể lực tối đa lên {maxStamina}");
+            OnStaminaChanged?.Invoke(currentStamina, maxStamina);
         }
 
         public void UpgradeHagglingBonus(float extraRatio)
@@ -41,6 +49,7 @@ namespace ChoNoiMienTay.Presentation
             {
                 currentStamina -= amount;
                 Debug.Log($"[PlayerStats] Đã tiêu hao {amount} Thể lực. Còn lại: {currentStamina}/{maxStamina}");
+                OnStaminaChanged?.Invoke(currentStamina, maxStamina);
                 return true;
             }
             Debug.LogWarning($"[PlayerStats] KHÔNG ĐỦ THỂ LỰC! Cần {amount}, nhưng chỉ còn {currentStamina}");
@@ -51,6 +60,7 @@ namespace ChoNoiMienTay.Presentation
         {
             currentStamina = Mathf.Clamp(currentStamina + amount, 0, maxStamina);
             Debug.Log($"[PlayerStats] Đã hồi phục {amount} Thể lực. Hiện tại: {currentStamina}/{maxStamina}");
+            OnStaminaChanged?.Invoke(currentStamina, maxStamina);
         }
 
         public void AddMoney(int amount)
@@ -79,6 +89,7 @@ namespace ChoNoiMienTay.Presentation
             currentStamina = stamina;
             maxStamina = maxStam;
             maxBonusPriceRatio = bonusRatio;
+            OnStaminaChanged?.Invoke(currentStamina, maxStamina);
         }
     }
 }

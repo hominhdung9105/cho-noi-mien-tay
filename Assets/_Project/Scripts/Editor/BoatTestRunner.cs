@@ -56,6 +56,10 @@ namespace ChoNoi.Editor
             PrintGroup("6. KIEM TRA DO BEN & GIOI HAN VAN TOC");
             RunDurabilityTests();
 
+            // --- Nhóm 7: Nhiên liệu (Phase 3) ---
+            PrintGroup("7. KIEM TRA NHIEN LIEU (Fuel)");
+            RunFuelTests();
+
             // --- Tổng kết ---
             PrintSummary();
 
@@ -268,7 +272,7 @@ namespace ChoNoi.Editor
         // NHÓM 5: ENVIRONMENT & TIDE (Phase 3)
         // ──────────────────────────────────────────────
 
-        // Công thức mực nước (mirror EnvironmentProfileSO.EvaluateWaterHeight).
+        // Công thức mực nước (mirror AtmosphericProfileSO.EvaluateWaterHeight).
         private static float WaterHeight(float min, float max, float factor)
             => Mathf.Lerp(min, max, factor);
 
@@ -286,8 +290,8 @@ namespace ChoNoi.Editor
             Assert("Tide: factor cao hon -> mat nuoc cao hon",
                 WaterHeight(-2f, 0f, 0.7f) > WaterHeight(-2f, 0f, 0.3f));
 
-            // --- EnvironmentProfileSO instance (gia tri mac dinh) ---
-            var profile = ScriptableObject.CreateInstance<EnvironmentProfileSO>();
+            // --- AtmosphericProfileSO instance (gia tri mac dinh) ---
+            var profile = ScriptableObject.CreateInstance<AtmosphericProfileSO>();
 
             Assert("Profile: MaxWaterHeight > MinWaterHeight (sang cao hon chieu)",
                 profile.MaxWaterHeight > profile.MinWaterHeight);
@@ -365,6 +369,70 @@ namespace ChoNoi.Editor
             // toc do chi phu thuoc baseMaxSpeed, hoan toan doc lap voi ThrustForce.
             Assert("Do ben KHONG lam giam ThrustForce (thrust > 0, doc lap voi tran toc do)",
                 stats.ThrustForce > 0f);
+
+            Object.DestroyImmediate(stats);
+        }
+
+        // ──────────────────────────────────────────────
+        // NHÓM 7: NHIÊN LIỆU (Phase 3)
+        // ──────────────────────────────────────────────
+
+        // Hệ số thrust còn lại theo trạng thái xăng (mirror BoatController: hết xăng -> 0).
+        private static float FuelThrustPerformance(float basePerformance, bool isOutOfFuel)
+            => isOutOfFuel ? 0f : basePerformance;
+
+        private static void RunFuelTests()
+        {
+            var stats = ScriptableObject.CreateInstance<BoatStats>();
+
+            // Cấu hình mặc định hợp lệ
+            Assert("Fuel: MaxFuel > 0",
+                stats.MaxFuel > 0f);
+            Assert("Fuel: FuelConsumptionRate > 0",
+                stats.FuelConsumptionRate > 0f);
+
+            // InitializeFuel: nạp đầy bình + bắn event đúng giá trị
+            float evtCurrent = -1f, evtMax = -1f;
+            stats.OnFuelChanged += (c, m) => { evtCurrent = c; evtMax = m; };
+            stats.InitializeFuel();
+            Assert("Fuel: InitializeFuel -> CurrentFuel == MaxFuel",
+                Approx(stats.CurrentFuel, stats.MaxFuel));
+            Assert("Fuel: InitializeFuel ban OnFuelChanged dung (current,max)",
+                Approx(evtCurrent, stats.MaxFuel) && Approx(evtMax, stats.MaxFuel));
+            Assert("Fuel: con xang -> IsOutOfFuel = false",
+                !stats.IsOutOfFuel);
+
+            // ConsumeFuel: trừ đúng lượng
+            float before = stats.CurrentFuel;
+            stats.ConsumeFuel(10f);
+            Assert("Fuel: ConsumeFuel(10) tru dung 10 don vi",
+                Approx(stats.CurrentFuel, before - 10f));
+
+            // ConsumeFuel(0) không đổi
+            float afterTen = stats.CurrentFuel;
+            stats.ConsumeFuel(0f);
+            Assert("Fuel: ConsumeFuel(0) khong thay doi xang",
+                Approx(stats.CurrentFuel, afterTen));
+
+            // Tiêu hao vượt mức -> clamp về 0, IsOutOfFuel = true
+            stats.ConsumeFuel(stats.MaxFuel * 2f);
+            Assert("Fuel: tieu hao vuot muc -> clamp ve 0 (khong am)",
+                Approx(stats.CurrentFuel, 0f));
+            Assert("Fuel: het xang -> IsOutOfFuel = true",
+                stats.IsOutOfFuel);
+
+            // Hết xăng -> hệ số lực đẩy động cơ = 0 (ngắt máy)
+            Assert("Fuel: het xang -> thrust performance = 0 (ngat luc day)",
+                Approx(FuelThrustPerformance(1f, stats.IsOutOfFuel), 0f));
+            Assert("Fuel: con xang -> thrust performance giu nguyen",
+                Approx(FuelThrustPerformance(1f, false), 1f));
+
+            // Refuel: nạp lại + clamp không vượt MaxFuel
+            stats.Refuel(stats.MaxFuel * 5f);
+            Assert("Fuel: Refuel vuot dung tich -> clamp ve MaxFuel",
+                Approx(stats.CurrentFuel, stats.MaxFuel));
+            Assert("Fuel: nap lai xang -> IsOutOfFuel = false (may chay lai)",
+                !stats.IsOutOfFuel);
 
             Object.DestroyImmediate(stats);
         }

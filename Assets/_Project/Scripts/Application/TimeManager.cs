@@ -39,9 +39,24 @@ namespace ChoNoi.Application
         public event Action<GamePhase> OnPhaseChanged;
         public event Action OnSleep;
         public event Action<int> OnDayChanged;
+        // Bắn giá trị thời gian chuẩn hoá [0,1) (= giờ/24) mỗi khi phút đổi — cho AtmosphereSkyBridge nội suy mượt.
+        public event Action<float> OnTimeNormalized;
 
         public GamePhase CurrentPhase => currentPhase;
         public int CurrentDay { get; private set; } = 1;
+
+        /// <summary>
+        /// Tốc độ trôi thời gian (phút game / giây thực). Cho phép UI điều khiển
+        /// tăng/giảm tốc hoặc tạm dừng (= 0). Không phụ thuộc UI — chỉ đọc/ghi state.
+        /// </summary>
+        public float TimeScale
+        {
+            get => timeScale;
+            set => timeScale = Mathf.Max(0f, value);
+        }
+
+        /// <summary>Thời gian chuẩn hoá trong ngày [0,1) (= giờ/24) — dùng để nội suy môi trường.</summary>
+        public float NormalizedTime => Mathf.Repeat(minutesOfDay, 1440f) / 1440f;
 
         public void Sleep()
         {
@@ -57,6 +72,7 @@ namespace ChoNoi.Application
                 currentPhase = GamePhase.Dawn;
                 OnDayChanged?.Invoke(CurrentDay);
                 OnTimeChanged?.Invoke(Hour, Minute);
+                OnTimeNormalized?.Invoke(NormalizedTime);
                 OnPhaseChanged?.Invoke(currentPhase);
             }
             else
@@ -98,6 +114,7 @@ namespace ChoNoi.Application
             {
                 lastMinute = Minute;
                 OnTimeChanged?.Invoke(Hour, Minute);
+                OnTimeNormalized?.Invoke(NormalizedTime);
 
                 // Bước 3: Nếu giờ mới rơi vào Phase khác → phát OnPhaseChanged.
                 GamePhase phase = GetPhaseForHour(Hour);

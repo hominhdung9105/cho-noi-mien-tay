@@ -6,6 +6,8 @@
  *              Multiplier: ghe càng nặng → tăng tốc chậm, bẻ lái lỳ, cản nước tăng.
  *              Phase 3: phát hiện mắc cạn (chạm đáy sông theo riverbedLayer) → giảm
  *              mạnh lực đẩy/lái và thêm ma sát, mô phỏng ghe bị kẹt khi nước hạ.
+ *              Phase 3 (Fuel): mỗi FixedUpdate trừ xăng trong BoatStats khi tăng tốc; hết
+ *              xăng → ngắt lực đẩy động cơ, ghe trôi theo quán tính rồi dừng.
  *              Phase 4: khóa trần vận tốc theo độ bền (IDurabilityProvider) và cấu hình
  *              Rigidbody (Continuous + freeze rotation X/Z) chống xuyên tường, chống lật.
  * [Dependencies]: IBoatInput, IWeightProvider, IDurabilityProvider (Domain),
@@ -74,6 +76,11 @@ namespace ChoNoi.Presentation
             rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
             // Chỉ cho xoay quanh trục Y → va chạm không làm ghe lật úp / văng lên trời.
             rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+
+            // Nạp đầy xăng đầu phiên Play. currentFuel là runtime-state trong SO dùng chung
+            // nên phải reset ở đây để không "dính" giá trị từ lần Play trước.
+            if (boatStats != null)
+                boatStats.InitializeFuel();
         }
 
         private void FixedUpdate()
@@ -131,6 +138,16 @@ namespace ChoNoi.Presentation
             // Tách hiệu suất đẩy và lái để hỗ trợ người chơi thoát mắc cạn khi đi lùi hoặc bẻ lái
             float thrustPerformance = basePerformance;
             float steeringPerformance = basePerformance;
+
+            // Phase 3 - Nhiên liệu: máy đuôi tôm chỉ tốn xăng khi đang tăng tốc (throttle != 0).
+            // Lượng tiêu hao tỉ lệ với độ ga và thời gian -> không phụ thuộc frame rate.
+            if (Mathf.Abs(throttle) > 0.01f)
+                boatStats.ConsumeFuel(boatStats.FuelConsumptionRate * Mathf.Abs(throttle) * Time.fixedDeltaTime);
+
+            // Hết xăng -> NGẮT hoàn toàn lực đẩy động cơ (thrustPerformance = 0). Ghe chỉ còn
+            // trôi theo quán tính cũ rồi dừng hẳn nhờ lực cản nước (đúng Test Case 03).
+            if (boatStats.IsOutOfFuel)
+                thrustPerformance = 0f;
 
             if (wasGrounded)
             {
