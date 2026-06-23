@@ -30,6 +30,20 @@ namespace ChoNoiMienTay.Editor
         private const string BoatModelPath = "Assets/_Project/Art/Models/thuyencoban.fbx";
         private const string NpcModelPath = "Assets/_Project/Art/Models/nvatdemo.fbx";
         private const string BargainingItemsFolder = "Assets/_Project/ScriptableObjects/Bargaining/Items";
+        private const string TerrainArtFolder = "Assets/_Project/Art/Terrain";
+        private const string GrassTexturePath = TerrainArtFolder + "/StylizedGrass_Texture.asset";
+        private const string MudTexturePath = TerrainArtFolder + "/MekongMud_Texture.asset";
+        private const string GrassLayerPath = TerrainArtFolder + "/StylizedGrass_TerrainLayer.terrainlayer";
+        private const string MudLayerPath = TerrainArtFolder + "/MekongMud_TerrainLayer.terrainlayer";
+        private const float TerrainWorldHeight = 18f;
+        private const float TerrainWorldWidth = 240f;
+        private const float TerrainWorldDepth = 220f;
+        private const float WaterSurfaceY = 3.35f;
+        private const float TerrainBaseHeight = 0.23f;
+        private const float RiverBedHeight = 0.015f;
+        private const float MainRiverHalfWidth = 18f;
+        private const float ForkRiverHalfWidth = 14f;
+        private const float BankBlendWidth = 38f;
 
         [MenuItem("ChoNoi/Scenes/Build River Market Scene")]
         public static void BuildScene()
@@ -57,7 +71,7 @@ namespace ChoNoiMienTay.Editor
             GameObject waterPlane = BuildWater(worldRoot.transform);
             BuildObstacles(worldRoot.transform);
             BuildNpcBoats(worldRoot.transform);
-            BuildRiverLife(worldRoot.transform);
+            BuildRiverLife(worldRoot.transform, terrain);
             BuildEnvironmentAssets(worldRoot.transform, terrain);
             BuildAmbientNpcCrowd(worldRoot.transform, terrain);
             BuildStiltHouses(worldRoot.transform, terrain);
@@ -138,6 +152,7 @@ namespace ChoNoiMienTay.Editor
         {
             Directory.CreateDirectory("Assets/_Project/Scenes/Core");
             Directory.CreateDirectory("Assets/_Project/ScriptableObjects/RiverMarket");
+            Directory.CreateDirectory(TerrainArtFolder);
         }
 
         private static List<ItemData> LoadMarketItems()
@@ -360,10 +375,11 @@ namespace ChoNoiMienTay.Editor
             // Tọa độ định nghĩa sông ngòi để tránh đặt cây đè lên sông
             Vector2 mainStart = new Vector2(120f, 0f);
             Vector2 junction = new Vector2(120f, 92f);
-            Vector2 leftForkEnd = new Vector2(36f, 220f);
-            Vector2 rightForkEnd = new Vector2(204f, 220f);
-            float mainHalfWidth = 18f;
-            float forkHalfWidth = 14f;
+            Vector2 leftForkEnd = new Vector2(36f, TerrainWorldDepth);
+            Vector2 rightForkEnd = new Vector2(204f, TerrainWorldDepth);
+            float mainHalfWidth = MainRiverHalfWidth;
+            float forkHalfWidth = ForkRiverHalfWidth;
+            float treeBankClearance = BankBlendWidth * 0.65f;
 
             // Rải cây cối trên đất liền dọc theo 2 bên bờ sông
             for (float x = 12f; x <= 228f; x += 14f)
@@ -380,7 +396,7 @@ namespace ChoNoiMienTay.Editor
                     float dRight = DistanceToSegment(point, junction, rightForkEnd);
 
                     // Nếu vị trí là đất liền (nằm ngoài phạm vi sông + biên an toàn)
-                    if (dMain > mainHalfWidth + 8f && dLeft > forkHalfWidth + 8f && dRight > forkHalfWidth + 8f)
+                    if (dMain > mainHalfWidth + treeBankClearance && dLeft > forkHalfWidth + treeBankClearance && dRight > forkHalfWidth + treeBankClearance)
                     {
                         // Giu khu spawn va hanh lang camera thong thoang, tranh cay moc sat mat nguoi choi.
                         if (posX > 48f && posX < 108f && posZ < 72f)
@@ -390,8 +406,8 @@ namespace ChoNoiMienTay.Editor
                         
                         // Chọn loại cây. Ưu tiên cây dừa (palm_trees) ở gần mép bờ sông hơn
                         string path = treePaths[Random.Range(0, treePaths.Length)];
-                        float minDistanceToWater = Mathf.Min(dMain, dLeft, dRight);
-                        if (minDistanceToWater < 35f && Random.value < 0.7f)
+                        float minEdgeToWater = Mathf.Min(dMain - mainHalfWidth, dLeft - forkHalfWidth, dRight - forkHalfWidth);
+                        if (minEdgeToWater < 18f && Random.value < 0.7f)
                         {
                             path = "Assets/_Project/Art/model_mau/Cay/palm_trees.glb";
                         }
@@ -481,50 +497,53 @@ namespace ChoNoiMienTay.Editor
             TerrainData terrainData = new TerrainData
             {
                 heightmapResolution = 513,
-                size = new Vector3(240f, 18f, 220f)
+                alphamapResolution = 512,
+                size = new Vector3(TerrainWorldWidth, TerrainWorldHeight, TerrainWorldDepth)
             };
 
             float[,] heights = new float[terrainData.heightmapResolution, terrainData.heightmapResolution];
             int res = terrainData.heightmapResolution;
-            Vector2 mainStart = new Vector2(120f, 0f);
-            Vector2 junction = new Vector2(120f, 92f);
-            Vector2 leftForkEnd = new Vector2(36f, 220f);
-            Vector2 rightForkEnd = new Vector2(204f, 220f);
-            float baseHeight = 0.23f;
-            float riverBed = 0.015f;
-            float mainHalfWidth = 18f;
-            float forkHalfWidth = 14f;
-            float bankBlendWidth = 28f;
+            float submergedMudflatHeight = (WaterSurfaceY - 0.35f) / terrainData.size.y;
 
             for (int row = 0; row < res; row++)
             {
                 for (int col = 0; col < res; col++)
                 {
                     Vector2 point = new Vector2((float)col / (res - 1) * terrainData.size.x, (float)row / (res - 1) * terrainData.size.z);
-                    float dMain = DistanceToSegment(point, mainStart, junction);
-                    float dLeft = DistanceToSegment(point, junction, leftForkEnd);
-                    float dRight = DistanceToSegment(point, junction, rightForkEnd);
-                    float riverBlend = 0f;
-                    riverBlend = Mathf.Max(riverBlend, 1f - Mathf.SmoothStep(0f, bankBlendWidth, Mathf.Max(0f, dMain - mainHalfWidth)));
-                    riverBlend = Mathf.Max(riverBlend, 1f - Mathf.SmoothStep(0f, bankBlendWidth, Mathf.Max(0f, dLeft - forkHalfWidth)));
-                    riverBlend = Mathf.Max(riverBlend, 1f - Mathf.SmoothStep(0f, bankBlendWidth, Mathf.Max(0f, dRight - forkHalfWidth)));
-
+                    RiverDistance river = GetNearestRiverDistance(point);
+                    float edgeDistance = river.Distance - river.HalfWidth;
                     float shoreNoise = Mathf.PerlinNoise(point.x * 0.025f, point.y * 0.025f) * 0.018f;
-                    float height = Mathf.Lerp(baseHeight + shoreNoise, riverBed, riverBlend);
+                    float height;
+
+                    if (edgeDistance < 0f)
+                    {
+                        float channelT = Mathf.InverseLerp(0f, -river.HalfWidth, edgeDistance);
+                        channelT = Mathf.SmoothStep(0f, 1f, channelT);
+                        height = Mathf.Lerp(submergedMudflatHeight, RiverBedHeight, channelT);
+                    }
+                    else
+                    {
+                        float bankT = Mathf.SmoothStep(0f, BankBlendWidth, edgeDistance);
+                        height = Mathf.Lerp(submergedMudflatHeight, TerrainBaseHeight + shoreNoise, bankT);
+                    }
 
                     // Khu bờ spawn phẳng, rộng để người chơi bắt đầu đi bộ trước khi lên ghe.
-                    if (point.y < 52f && point.x < 112f)
-                        height = Mathf.Lerp(height, baseHeight - 0.02f, 0.92f);
+                    float spawnMask = SmoothRectMask(point, new Vector2(0f, 0f), new Vector2(101f, 52f), 12f);
+                    spawnMask *= Mathf.SmoothStep(3f, 15f, edgeDistance);
+                    height = Mathf.Lerp(height, TerrainBaseHeight - 0.02f, spawnMask * 0.92f);
 
                     // Mo them hanh lang tam nhin o khu spawn de camera khong bi vach dat xam chan mat.
-                    if (point.y < 78f && point.x > 70f && point.x < 132f)
-                        height = Mathf.Min(height, baseHeight - 0.035f);
+                    float corridorMask = SmoothRectMask(point, new Vector2(70f, 0f), new Vector2(132f, 78f), 14f);
+                    corridorMask *= Mathf.SmoothStep(8f, 18f, edgeDistance);
+                    height = Mathf.Lerp(height, Mathf.Min(height, TerrainBaseHeight - 0.035f), corridorMask);
 
                     heights[row, col] = height;
                 }
             }
 
+            SmoothRiverbankHeights(heights, terrainData.size, 2, 0.26f);
             terrainData.SetHeights(0, 0, heights);
+            ConfigureTerrainLayers(terrainData, heights);
             GameObject terrainRoot = Terrain.CreateTerrainGameObject(terrainData);
             terrainRoot.name = "RiverTerrain";
             terrainRoot.transform.SetParent(parent);
@@ -537,7 +556,7 @@ namespace ChoNoiMienTay.Editor
             GameObject water = GameObject.CreatePrimitive(PrimitiveType.Plane);
             water.name = "WaterSurface";
             water.transform.SetParent(parent);
-            water.transform.position = new Vector3(120f, 3.35f, 110f);
+            water.transform.position = new Vector3(120f, WaterSurfaceY, 110f);
             water.transform.localScale = new Vector3(24f, 1f, 22f);
 
             // MeshCollider from Primitive Plane is concave and doesn't support trigger, disable it
@@ -603,7 +622,7 @@ namespace ChoNoiMienTay.Editor
 
             for (int i = 0; i < spots.Length; i++)
             {
-                float groundY = terrain != null ? terrain.SampleHeight(new Vector3(spots[i].x, 0f, spots[i].y)) : 3f;
+                float groundY = SampleTerrainHeight(terrain, spots[i].x, spots[i].y, 3f);
                 BuildStiltHouse(root.transform, $"StiltHouse_{i}", new Vector3(spots[i].x, groundY, spots[i].y), (i * 47f) % 360f);
             }
         }
@@ -758,13 +777,13 @@ namespace ChoNoiMienTay.Editor
             AddTradeTarget(npc, isLargeBoat ? "Thuong Lai" : "Ghe Ban Hang", 3.1f);
         }
 
-        private static void BuildRiverLife(Transform parent)
+        private static void BuildRiverLife(Transform parent, Terrain terrain)
         {
             GameObject lifeRoot = new GameObject("RiverLife");
             lifeRoot.transform.SetParent(parent);
 
-            CreateReedCluster(lifeRoot.transform, "LeftBankReeds", new Vector3(83f, 3.2f, 88f), 5);
-            CreateReedCluster(lifeRoot.transform, "RightBankReeds", new Vector3(157f, 3.2f, 74f), 6);
+            CreateReedCluster(lifeRoot.transform, "LeftBankReeds", terrain, new Vector3(83f, 0f, 88f), 5);
+            CreateReedCluster(lifeRoot.transform, "RightBankReeds", terrain, new Vector3(157f, 0f, 74f), 6);
             CreateMistBand(lifeRoot.transform, "MorningMist", new Vector3(121f, 4.6f, 128f), new Vector3(14f, 0.7f, 5f));
         }
 
@@ -839,17 +858,21 @@ namespace ChoNoiMienTay.Editor
             AddTradeTarget(npc, name.Replace("_", " "), 3f);
         }
 
-        private static void CreateReedCluster(Transform parent, string name, Vector3 center, int count)
+        private static void CreateReedCluster(Transform parent, string name, Terrain terrain, Vector3 center, int count)
         {
             GameObject cluster = new GameObject(name);
             cluster.transform.SetParent(parent);
-            cluster.transform.position = center;
+            float centerY = SampleTerrainHeight(terrain, center.x, center.z, center.y);
+            cluster.transform.position = new Vector3(center.x, centerY, center.z);
 
             for (int index = 0; index < count; index++)
             {
                 float offsetX = (index % 3 - 1) * 1.15f;
                 float offsetZ = (index / 3) * 1.15f;
-                GameObject reed = CreatePrimitiveChild(cluster.transform, $"Reed_{index}", PrimitiveType.Cylinder, new Vector3(offsetX, 0.9f, offsetZ), new Vector3(0.05f, 1.2f + index * 0.08f, 0.05f), new Color(0.45f, 0.60f, 0.20f));
+                float halfHeight = 1.2f + index * 0.08f;
+                float groundY = SampleTerrainHeight(terrain, center.x + offsetX, center.z + offsetZ, centerY);
+                Vector3 localPosition = new Vector3(offsetX, groundY - centerY + halfHeight, offsetZ);
+                GameObject reed = CreatePrimitiveChild(cluster.transform, $"Reed_{index}", PrimitiveType.Cylinder, localPosition, new Vector3(0.05f, halfHeight, 0.05f), new Color(0.45f, 0.60f, 0.20f));
                 reed.GetComponent<Collider>().enabled = false;
                 AmbientBob ambient = reed.AddComponent<AmbientBob>();
                 SetPrivate(ambient, "bobAxis", new Vector3(0f, 0.05f, 0f));
@@ -1238,6 +1261,228 @@ namespace ChoNoiMienTay.Editor
                 color = color
             };
             renderer.sharedMaterial = material;
+        }
+
+        private struct RiverDistance
+        {
+            public float Distance;
+            public float HalfWidth;
+
+            public RiverDistance(float distance, float halfWidth)
+            {
+                Distance = distance;
+                HalfWidth = halfWidth;
+            }
+
+            public float EdgeDistance => Distance - HalfWidth;
+        }
+
+        private static RiverDistance GetNearestRiverDistance(Vector2 point)
+        {
+            Vector2 mainStart = new Vector2(120f, 0f);
+            Vector2 junction = new Vector2(120f, 92f);
+            Vector2 leftForkEnd = new Vector2(36f, TerrainWorldDepth);
+            Vector2 rightForkEnd = new Vector2(204f, TerrainWorldDepth);
+
+            RiverDistance nearest = new RiverDistance(DistanceToSegment(point, mainStart, junction), MainRiverHalfWidth);
+            float nearestEdge = nearest.EdgeDistance;
+
+            RiverDistance left = new RiverDistance(DistanceToSegment(point, junction, leftForkEnd), ForkRiverHalfWidth);
+            if (left.EdgeDistance < nearestEdge)
+            {
+                nearest = left;
+                nearestEdge = left.EdgeDistance;
+            }
+
+            RiverDistance right = new RiverDistance(DistanceToSegment(point, junction, rightForkEnd), ForkRiverHalfWidth);
+            if (right.EdgeDistance < nearestEdge)
+                nearest = right;
+
+            return nearest;
+        }
+
+        private static float SmoothRectMask(Vector2 point, Vector2 min, Vector2 max, float feather)
+        {
+            float left = Mathf.SmoothStep(min.x - feather, min.x + feather, point.x);
+            float right = 1f - Mathf.SmoothStep(max.x - feather, max.x + feather, point.x);
+            float bottom = Mathf.SmoothStep(min.y - feather, min.y + feather, point.y);
+            float top = 1f - Mathf.SmoothStep(max.y - feather, max.y + feather, point.y);
+            return Mathf.Clamp01(left * right * bottom * top);
+        }
+
+        private static void SmoothRiverbankHeights(float[,] heights, Vector3 terrainSize, int iterations, float strength)
+        {
+            int rows = heights.GetLength(0);
+            int cols = heights.GetLength(1);
+
+            for (int iteration = 0; iteration < iterations; iteration++)
+            {
+                float[,] source = (float[,])heights.Clone();
+                for (int row = 1; row < rows - 1; row++)
+                {
+                    for (int col = 1; col < cols - 1; col++)
+                    {
+                        Vector2 point = new Vector2((float)col / (cols - 1) * terrainSize.x, (float)row / (rows - 1) * terrainSize.z);
+                        float edgeDistance = GetNearestRiverDistance(point).EdgeDistance;
+                        float bankMask = Mathf.SmoothStep(-10f, 6f, edgeDistance) *
+                            (1f - Mathf.SmoothStep(BankBlendWidth - 8f, BankBlendWidth + 8f, edgeDistance));
+
+                        if (bankMask <= 0.001f)
+                            continue;
+
+                        float average =
+                            source[row - 1, col - 1] + source[row - 1, col] + source[row - 1, col + 1] +
+                            source[row, col - 1] + source[row, col] + source[row, col + 1] +
+                            source[row + 1, col - 1] + source[row + 1, col] + source[row + 1, col + 1];
+                        average /= 9f;
+                        heights[row, col] = Mathf.Lerp(source[row, col], average, strength * bankMask);
+                    }
+                }
+            }
+        }
+
+        private static void ConfigureTerrainLayers(TerrainData terrainData, float[,] heights)
+        {
+            Texture2D grassTexture = EnsureTerrainTexture(
+                GrassTexturePath,
+                "StylizedGrass_Texture",
+                new Color32(0x4C, 0xAF, 0x50, 0xFF),
+                new Color32(0x2E, 0x7D, 0x32, 0xFF),
+                new Color32(0x8B, 0xC3, 0x4A, 0xFF),
+                17f);
+
+            Texture2D mudTexture = EnsureTerrainTexture(
+                MudTexturePath,
+                "MekongMud_Texture",
+                new Color32(0x5D, 0x40, 0x37, 0xFF),
+                new Color32(0x3E, 0x27, 0x23, 0xFF),
+                new Color32(0x8D, 0x6E, 0x63, 0xFF),
+                51f);
+
+            TerrainLayer grassLayer = EnsureTerrainLayer(GrassLayerPath, "StylizedGrass_TerrainLayer", grassTexture, new Vector2(16f, 16f), 0.18f);
+            TerrainLayer mudLayer = EnsureTerrainLayer(MudLayerPath, "MekongMud_TerrainLayer", mudTexture, new Vector2(10f, 10f), 0.08f);
+            terrainData.terrainLayers = new[] { grassLayer, mudLayer };
+            terrainData.SetAlphamaps(0, 0, BuildTerrainAlphamaps(terrainData, heights));
+        }
+
+        private static Texture2D EnsureTerrainTexture(string path, string textureName, Color baseColor, Color darkColor, Color lightColor, float seed)
+        {
+            Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (texture == null)
+            {
+                texture = new Texture2D(64, 64, TextureFormat.RGBA32, true)
+                {
+                    name = textureName
+                };
+                AssetDatabase.CreateAsset(texture, path);
+            }
+
+            texture.name = textureName;
+            texture.wrapMode = TextureWrapMode.Repeat;
+            texture.filterMode = FilterMode.Bilinear;
+
+            int width = Mathf.Max(1, texture.width);
+            int height = Mathf.Max(1, texture.height);
+            Color[] pixels = new Color[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float broadNoise = Mathf.PerlinNoise((x + seed) * 0.14f, (y - seed) * 0.14f);
+                    float speckleNoise = Mathf.PerlinNoise((x - seed) * 0.48f, (y + seed) * 0.48f);
+                    Color color = Color.Lerp(darkColor, lightColor, Mathf.SmoothStep(0.12f, 0.92f, broadNoise));
+                    color = Color.Lerp(baseColor, color, 0.55f);
+                    if (speckleNoise > 0.68f)
+                        color = Color.Lerp(color, lightColor, 0.18f);
+                    else if (speckleNoise < 0.24f)
+                        color = Color.Lerp(color, darkColor, 0.12f);
+
+                    pixels[y * width + x] = color;
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(true, false);
+            EditorUtility.SetDirty(texture);
+            return texture;
+        }
+
+        private static TerrainLayer EnsureTerrainLayer(string path, string layerName, Texture2D texture, Vector2 tileSize, float smoothness)
+        {
+            TerrainLayer layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
+            if (layer == null)
+            {
+                layer = new TerrainLayer
+                {
+                    name = layerName
+                };
+                AssetDatabase.CreateAsset(layer, path);
+            }
+
+            layer.name = layerName;
+            layer.diffuseTexture = texture;
+            layer.tileSize = tileSize;
+            layer.tileOffset = Vector2.zero;
+            layer.specular = Color.black;
+            layer.metallic = 0f;
+            layer.smoothness = smoothness;
+            EditorUtility.SetDirty(layer);
+            return layer;
+        }
+
+        private static float[,,] BuildTerrainAlphamaps(TerrainData terrainData, float[,] heights)
+        {
+            int resolution = terrainData.alphamapResolution;
+            float[,,] alphamaps = new float[resolution, resolution, 2];
+
+            for (int row = 0; row < resolution; row++)
+            {
+                for (int col = 0; col < resolution; col++)
+                {
+                    Vector2 point = new Vector2((float)col / (resolution - 1) * terrainData.size.x, (float)row / (resolution - 1) * terrainData.size.z);
+                    RiverDistance river = GetNearestRiverDistance(point);
+                    float outsideEdge = Mathf.Max(0f, river.EdgeDistance);
+                    float normalizedHeight = SampleNormalizedHeight(heights, point, terrainData.size);
+
+                    float bankInfluence = 1f - Mathf.SmoothStep(BankBlendWidth * 0.78f, BankBlendWidth + 9f, outsideEdge);
+                    float slopeInfluence = 1f - Mathf.SmoothStep(TerrainBaseHeight - 0.035f, TerrainBaseHeight - 0.008f, normalizedHeight);
+                    float underwaterInfluence = 1f - Mathf.SmoothStep((WaterSurfaceY - 0.08f) / terrainData.size.y, (WaterSurfaceY + 0.18f) / terrainData.size.y, normalizedHeight);
+                    float mudWeight = Mathf.Clamp01(Mathf.Max(bankInfluence * slopeInfluence, bankInfluence * underwaterInfluence));
+
+                    float topLand = Mathf.SmoothStep(TerrainBaseHeight - 0.012f, TerrainBaseHeight + 0.006f, normalizedHeight);
+                    mudWeight = Mathf.Lerp(mudWeight, 0f, topLand);
+                    mudWeight = Mathf.Clamp01(mudWeight + (Mathf.PerlinNoise(point.x * 0.11f, point.y * 0.11f) - 0.5f) * 0.08f * bankInfluence);
+
+                    alphamaps[row, col, 0] = 1f - mudWeight;
+                    alphamaps[row, col, 1] = mudWeight;
+                }
+            }
+
+            return alphamaps;
+        }
+
+        private static float SampleNormalizedHeight(float[,] heights, Vector2 point, Vector3 terrainSize)
+        {
+            int rows = heights.GetLength(0);
+            int cols = heights.GetLength(1);
+            float x = Mathf.Clamp01(point.x / terrainSize.x) * (cols - 1);
+            float z = Mathf.Clamp01(point.y / terrainSize.z) * (rows - 1);
+
+            int x0 = Mathf.Clamp(Mathf.FloorToInt(x), 0, cols - 1);
+            int z0 = Mathf.Clamp(Mathf.FloorToInt(z), 0, rows - 1);
+            int x1 = Mathf.Clamp(x0 + 1, 0, cols - 1);
+            int z1 = Mathf.Clamp(z0 + 1, 0, rows - 1);
+            float tx = x - x0;
+            float tz = z - z0;
+
+            float a = Mathf.Lerp(heights[z0, x0], heights[z0, x1], tx);
+            float b = Mathf.Lerp(heights[z1, x0], heights[z1, x1], tx);
+            return Mathf.Lerp(a, b, tz);
+        }
+
+        private static float SampleTerrainHeight(Terrain terrain, float x, float z, float fallbackY = 0f)
+        {
+            return terrain != null ? terrain.SampleHeight(new Vector3(x, 0f, z)) : fallbackY;
         }
 
         private static float DistanceToSegment(Vector2 point, Vector2 a, Vector2 b)
