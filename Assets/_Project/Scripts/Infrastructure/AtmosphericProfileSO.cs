@@ -46,6 +46,34 @@ namespace ChoNoi.Infrastructure
         // Hệ số nội suy 0..1 theo giờ: 1 = maxWaterHeight, 0 = minWaterHeight.
         [SerializeField] private AnimationCurve waterLevelOverDay = AnimationCurve.EaseInOut(0, 1, 1, 1);
 
+        [Header("Hậu xử lý (Post-Processing) — URP Volume")]
+        // Saturation boost (đơn vị URP -100..+100): đỉnh +25 lúc 09:00 (chợ cao điểm), -10 lúc 03:00 (tiền bình minh).
+        [SerializeField] private AnimationCurve saturationOverDay = new AnimationCurve(
+            new Keyframe(0f,      0f),   // 00:00 — trung tính
+            new Keyframe(0.125f, -10f),  // 03:00 — nhẹ desaturate
+            new Keyframe(0.375f,  25f),  // 09:00 — đỉnh (chợ cao điểm, màu nông sản nổi bật)
+            new Keyframe(0.583f,   5f),  // 14:00 — giảm dần
+            new Keyframe(0.75f,   10f),  // 18:00 — ánh vàng hoàng hôn
+            new Keyframe(1f,       0f)); // 24:00 — wrap về đêm
+
+        // Vignette intensity (0..1): đỉnh 0.4 lúc 03:00 (mắt chưa thích nghi bóng tối), 0 ban ngày.
+        [SerializeField] private AnimationCurve vignetteIntensityOverDay = new AnimationCurve(
+            new Keyframe(0f,      0.30f), // 00:00 — đêm tối
+            new Keyframe(0.125f,  0.40f), // 03:00 — đỉnh: mắt tiền bình minh
+            new Keyframe(0.25f,   0.10f), // 06:00 — bình minh, bắt đầu tan
+            new Keyframe(0.375f,  0f),    // 09:00 — ban ngày: không vignette
+            new Keyframe(0.75f,   0.05f), // 18:00 — hoàng hôn nhẹ
+            new Keyframe(1f,      0.30f));// 24:00 — wrap về đêm
+
+        // Lens Distortion intensity (-1..1): âm = barrel distortion, đỉnh -0.15 lúc 03:00 (mất phương hướng).
+        [SerializeField] private AnimationCurve lensDistortionOverDay = new AnimationCurve(
+            new Keyframe(0f,      -0.08f),
+            new Keyframe(0.125f,  -0.15f), // 03:00 — barrel distortion đỉnh
+            new Keyframe(0.25f,   -0.03f),
+            new Keyframe(0.375f,   0f),    // 09:00 — không méo
+            new Keyframe(0.75f,   -0.02f),
+            new Keyframe(1f,      -0.08f));
+
         public float MaxWaterHeight => maxWaterHeight;
         public float MinWaterHeight => minWaterHeight;
 
@@ -91,5 +119,17 @@ namespace ChoNoi.Infrastructure
         /// <param name="t01">Thời gian chuẩn hóa 0..1 (= giờ/24).</param>
         public float EvaluateWaterHeight(float t01)
             => Mathf.Lerp(minWaterHeight, maxWaterHeight, waterLevelOverDay.Evaluate(Mathf.Repeat(t01, 1f)));
+
+        /// <summary>Mức bão hoà màu (Saturation, đơn vị URP: -100..+100) tại t01.</summary>
+        public float EvaluateSaturation(float t01)
+            => Mathf.Clamp(saturationOverDay.Evaluate(Mathf.Repeat(t01, 1f)), -100f, 100f);
+
+        /// <summary>Cường độ Vignette (0..1) tại t01.</summary>
+        public float EvaluateVignetteIntensity(float t01)
+            => Mathf.Clamp01(vignetteIntensityOverDay.Evaluate(Mathf.Repeat(t01, 1f)));
+
+        /// <summary>Cường độ Lens Distortion (-1..1) tại t01. Âm = barrel distortion.</summary>
+        public float EvaluateLensDistortion(float t01)
+            => Mathf.Clamp(lensDistortionOverDay.Evaluate(Mathf.Repeat(t01, 1f)), -1f, 1f);
     }
 }
