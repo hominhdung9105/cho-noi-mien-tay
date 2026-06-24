@@ -22,6 +22,3 @@ MonoBehaviour:
   riverCurrent: {x: 0.14, y: 0, z: 0.26}
   maxPenaltyFactor: 0.42
   baseMaxSpeed: 11
-  maxFuel: 100
-  fuelConsumptionRate: 2.5
-  currentFuel: 100

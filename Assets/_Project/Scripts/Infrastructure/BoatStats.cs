@@ -2,16 +2,10 @@
  * BoatStats: ScriptableObject chứa toàn bộ chỉ số vật lý của ghe.
  * [Chức năng]: Lưu trữ tham số cấu hình theo nguyên tắc Data-Driven.
  *              Mọi chỉ số đều chỉnh được trong Inspector, không hard-code.
- *              Gồm các nhóm: lực đẩy, lực cản nước, lực cản ngang, mô-men lái, tải trọng,
- *              vận tốc tối đa và Nhiên Liệu (Fuel — Phase 3).
- *              Fuel phát event OnFuelChanged (Reactive) để UI của Dev 2 lắng nghe, BoatStats
- *              KHÔNG tham chiếu UI (tách lớp theo dev1-systems-rules.md).
- *              LƯU Ý: currentFuel là runtime-state nằm trong SO dùng chung -> BoatController phải
- *              gọi InitializeFuel() lúc Awake để reset mỗi phiên Play (tránh giá trị "dính").
- * [Dependencies]: System (Action event).
+ *              Gồm 6 nhóm: lực đẩy, lực cản nước, lực cản ngang, mô-men lái, tải trọng, vận tốc tối đa.
+ * [Dependencies]: Không có.
  */
 
-using System;
 using UnityEngine;
 
 namespace ChoNoi.Infrastructure
@@ -57,21 +51,6 @@ namespace ChoNoi.Infrastructure
         // (tối thiểu 30%). Lưu ý: độ bền KHÔNG giảm thrustForce, chỉ giới hạn vận tốc.
         [SerializeField] private float baseMaxSpeed = 10f;
 
-        [Header("Nhiên liệu (Fuel) — Phase 3")]
-        // Dung tích bình xăng tối đa (đơn vị tùy ý, mặc định 100).
-        [SerializeField] private float maxFuel = 100f;
-        // Lượng xăng tiêu hao mỗi giây khi máy đuôi tôm chạy hết ga (throttle = 1).
-        // Mức tiêu hao thực tế = fuelConsumptionRate * |throttle| * fixedDeltaTime.
-        [SerializeField] private float fuelConsumptionRate = 2.5f;
-        // Lượng xăng hiện tại (runtime). Reset về maxFuel qua InitializeFuel() lúc Awake.
-        [SerializeField] private float currentFuel = 100f;
-
-        /// <summary>
-        /// Bắn ra mỗi khi lượng xăng thay đổi. Tham số: (currentFuel, maxFuel).
-        /// UI Dev 2 subscribe để vẽ thanh Fuel — BoatStats tuyệt đối không đụng UI.
-        /// </summary>
-        public event Action<float, float> OnFuelChanged;
-
         public float ThrustForce      => thrustForce;
         public float WaterDrag        => waterDrag;
         public float SidewaysDrag     => sidewaysDrag;
@@ -82,45 +61,5 @@ namespace ChoNoi.Infrastructure
         public Vector3 RiverCurrent   => riverCurrent;
         public float MaxPenaltyFactor => maxPenaltyFactor;
         public float BaseMaxSpeed     => baseMaxSpeed;
-
-        public float MaxFuel              => maxFuel;
-        public float CurrentFuel          => currentFuel;
-        public float FuelConsumptionRate  => fuelConsumptionRate;
-        // True khi hết xăng -> BoatController ngắt lực đẩy động cơ.
-        public bool  IsOutOfFuel          => currentFuel <= 0f;
-
-        /// <summary>
-        /// Nạp đầy bình và phát event. Gọi từ BoatController.Awake để reset runtime-state
-        /// của SO dùng chung mỗi lần vào Play (tránh xăng "dính" từ phiên trước).
-        /// </summary>
-        public void InitializeFuel()
-        {
-            currentFuel = maxFuel;
-            OnFuelChanged?.Invoke(currentFuel, maxFuel);
-        }
-
-        /// <summary>
-        /// Trừ một lượng xăng (clamp >= 0) và phát OnFuelChanged nếu có thay đổi.
-        /// </summary>
-        /// <param name="amount">Lượng xăng tiêu hao (>= 0).</param>
-        public void ConsumeFuel(float amount)
-        {
-            if (amount <= 0f || currentFuel <= 0f) return;
-
-            currentFuel = Mathf.Max(0f, currentFuel - amount);
-            OnFuelChanged?.Invoke(currentFuel, maxFuel);
-        }
-
-        /// <summary>
-        /// Nạp thêm xăng (clamp <= maxFuel) và phát OnFuelChanged.
-        /// </summary>
-        /// <param name="amount">Lượng xăng nạp thêm (>= 0).</param>
-        public void Refuel(float amount)
-        {
-            if (amount <= 0f) return;
-
-            currentFuel = Mathf.Min(maxFuel, currentFuel + amount);
-            OnFuelChanged?.Invoke(currentFuel, maxFuel);
-        }
     }
 }
