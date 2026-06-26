@@ -28,16 +28,47 @@ namespace ChoNoi.Presentation.Player
 
             if (bargainingUI == null)
                 bargainingUI = FindAnyObjectByType<BargainingPrototypeUI>();
+
+            // Dynamically add NpcCustomerBehavior to all NPC trade targets in the scene (excluding Upgrade targets)
+            NpcTradeTarget[] targets = FindObjectsByType<NpcTradeTarget>(FindObjectsSortMode.None);
+            foreach (var target in targets)
+            {
+                if (target.TargetType != InteractionTargetType.Upgrade)
+                {
+                    if (target.GetComponent<NpcCustomerBehavior>() == null)
+                    {
+                        target.gameObject.AddComponent<NpcCustomerBehavior>();
+                    }
+                }
+            }
+        }
+
+        private bool CheckIsAnyUIOpen(FullSimulatorUI fullUI)
+        {
+            if (fullUI != null)
+            {
+                if (fullUI.IsDialogueOpen || fullUI.IsMarketingOpen || fullUI.IsPauseOpen || 
+                    fullUI.IsSettingsOpen || fullUI.IsTutorialOpen || fullUI.IsYardOpen || 
+                    fullUI.IsTradeQtyOpen)
+                {
+                    return true;
+                }
+            }
+            if (hud != null && (hud.IsUpgradeOpen || hud.IsNpcTradeOpen))
+            {
+                return true;
+            }
+            if (bargainingUI != null && !bargainingUI.IsHidden)
+            {
+                return true;
+            }
+            return false;
         }
 
         private void Update()
         {
             var fullUI = FindAnyObjectByType<FullSimulatorUI>();
-            bool isDialogueOpen = fullUI != null && fullUI.IsDialogueOpen;
-            bool isUpgradeOpen = hud != null && hud.IsUpgradeOpen;
-
-            // When dialogue or upgrade UI is active, the player is interacting (inputs frozen elsewhere)
-            bool isAnyUIOpen = isDialogueOpen || isUpgradeOpen || (hud != null && hud.IsNpcTradeOpen) || (bargainingUI != null && !bargainingUI.IsHidden);
+            bool isAnyUIOpen = CheckIsAnyUIOpen(fullUI);
 
             if (playerController != null && !playerController.CanMove && !isAnyUIOpen)
             {
@@ -67,9 +98,7 @@ namespace ChoNoi.Presentation.Player
                 return false;
 
             var fullUI = FindAnyObjectByType<FullSimulatorUI>();
-            bool isDialogueOpen = fullUI != null && fullUI.IsDialogueOpen;
-            bool isUpgradeOpen = hud != null && hud.IsUpgradeOpen;
-            bool isAnyUIOpen = isDialogueOpen || isUpgradeOpen || (hud != null && hud.IsNpcTradeOpen) || (bargainingUI != null && !bargainingUI.IsHidden);
+            bool isAnyUIOpen = CheckIsAnyUIOpen(fullUI);
 
             if (isAnyUIOpen)
                 CloseTrade();
@@ -79,7 +108,9 @@ namespace ChoNoi.Presentation.Player
             return true;
         }
 
-        private void OpenTrade(NpcTradeTarget target)
+        public NpcTradeTarget ActiveTradeTarget => activeTradeTarget;
+
+        public void OpenTrade(NpcTradeTarget target)
         {
             if (target == null)
                 return;

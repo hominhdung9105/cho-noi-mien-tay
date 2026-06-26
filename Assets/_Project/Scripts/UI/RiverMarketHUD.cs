@@ -6,6 +6,7 @@ using ChoNoi.Domain;
 using ChoNoiMienTay.Presentation;
 using ChoNoiMienTay.Infrastructure;
 using ChoNoi.Presentation;
+using ChoNoi.UI;
 using System.Collections.Generic;
 
 namespace ChoNoiMienTay.UI
@@ -21,6 +22,12 @@ namespace ChoNoiMienTay.UI
         [SerializeField] private DurabilityManager durabilityManager;
         [SerializeField] private List<ItemData> marketItems = new List<ItemData>();
 
+        [Header("Casual GUI Sprites")]
+        public Sprite panelBgSprite;
+        public Sprite buttonSpriteNormal;
+        public Sprite buttonSpriteHover;
+        public Sprite buttonSpritePressed;
+
         private Canvas canvas;
         private Text statsText;
         private Text timeText;
@@ -33,6 +40,10 @@ namespace ChoNoiMienTay.UI
         private GameObject upgradePanel;
         private GameObject tradePanel;
         private GameObject newsPanel;
+        private GameObject phaseTransitionPanel;
+        private Text phaseTransitionText;
+        private CanvasGroup phaseTransitionCanvasGroup;
+        private Coroutine phaseTransitionCoroutine;
         private int selectedMarketIndex;
         private bool isNpcTradeOpen;
         private string currentTradeNpcName = "Thuong Lai";
@@ -40,6 +51,15 @@ namespace ChoNoiMienTay.UI
         public bool IsNpcTradeOpen => isNpcTradeOpen;
         public bool IsUpgradeOpen => upgradePanel != null && upgradePanel.activeSelf;
         public bool IsNewsOpen => newsPanel != null && newsPanel.activeSelf;
+
+        public void SetCanvasActive(bool active)
+        {
+            BuildUIIfNeeded();
+            if (canvas != null)
+            {
+                canvas.gameObject.SetActive(active);
+            }
+        }
 
         public void Configure(
             TimeManager timeSource,
@@ -148,49 +168,49 @@ namespace ChoNoiMienTay.UI
 
             upgradePanel = CreatePanel("UpgradePanel", canvasObject.transform, new Color(0.08f, 0.16f, 0.18f, 0.86f));
             Stretch(upgradePanel.GetComponent<RectTransform>(), new Vector2(0.02f, 0.08f), new Vector2(0.26f, 0.86f));
-            CreateText("UpgradeTitle", upgradePanel.transform, 26, TextAnchor.MiddleCenter).text = "TRAI GHE XOM NUOC";
+            CreateText("UpgradeTitle", upgradePanel.transform, 26, TextAnchor.MiddleCenter).text = "TRẠI GHE XÓM NƯỚC";
             Stretch(upgradePanel.transform.Find("UpgradeTitle").GetComponent<RectTransform>(), new Vector2(0.06f, 0.86f), new Vector2(0.94f, 0.96f));
 
             upgradeText = CreateText("UpgradeText", upgradePanel.transform, 22, TextAnchor.UpperLeft);
             Stretch(upgradeText.rectTransform, new Vector2(0.08f, 0.55f), new Vector2(0.92f, 0.82f));
 
-            CreateActionButton(upgradePanel.transform, "Khoang Chua", new Vector2(0.08f, 0.45f), new Vector2(0.92f, 0.53f), () =>
+            CreateActionButton(upgradePanel.transform, "Khoang Chứa", new Vector2(0.08f, 0.45f), new Vector2(0.92f, 0.53f), () =>
             {
                 if (boatCampManager != null && boatCampManager.TryBuyNextStorageUpgrade()) RefreshAll();
             });
-            CreateActionButton(upgradePanel.transform, "Dong Co", new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.43f), () =>
+            CreateActionButton(upgradePanel.transform, "Động Cơ", new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.43f), () =>
             {
                 if (boatCampManager != null && boatCampManager.TryBuyNextEngineUpgrade()) RefreshAll();
             });
-            CreateActionButton(upgradePanel.transform, "Lop Mai", new Vector2(0.08f, 0.25f), new Vector2(0.92f, 0.33f), () =>
+            CreateActionButton(upgradePanel.transform, "Lợp Mái", new Vector2(0.08f, 0.25f), new Vector2(0.92f, 0.33f), () =>
             {
                 if (boatCampManager != null && boatCampManager.TryBuyRoofUpgrade()) RefreshAll();
             });
-            CreateActionButton(upgradePanel.transform, "Cay Beo", new Vector2(0.08f, 0.15f), new Vector2(0.92f, 0.23f), () =>
+            CreateActionButton(upgradePanel.transform, "Cây Bẹo", new Vector2(0.08f, 0.15f), new Vector2(0.92f, 0.23f), () =>
             {
                 if (boatCampManager != null && boatCampManager.TryBuyNextBambooPoleUpgrade()) RefreshAll();
             });
-            CreateActionButton(upgradePanel.transform, "Dong", new Vector2(0.08f, 0.05f), new Vector2(0.92f, 0.13f), CloseAllPanels);
+            CreateActionButton(upgradePanel.transform, "Đóng", new Vector2(0.08f, 0.05f), new Vector2(0.92f, 0.13f), CloseAllPanels);
 
             tradePanel = CreatePanel("TradePanel", canvasObject.transform, new Color(0.12f, 0.12f, 0.08f, 0.88f));
             Stretch(tradePanel.GetComponent<RectTransform>(), new Vector2(0.31f, 0.08f), new Vector2(0.69f, 0.44f));
             tradeTitleText = CreateText("TradeTitle", tradePanel.transform, 24, TextAnchor.MiddleCenter);
-            tradeTitleText.text = "CHO NOI TRUNG TAM";
+            tradeTitleText.text = "CHỢ NỔI TRUNG TÂM";
             Stretch(tradeTitleText.rectTransform, new Vector2(0.06f, 0.86f), new Vector2(0.94f, 0.96f));
 
             tradeText = CreateText("TradeText", tradePanel.transform, 20, TextAnchor.UpperLeft);
             Stretch(tradeText.rectTransform, new Vector2(0.08f, 0.48f), new Vector2(0.92f, 0.82f));
 
-            CreateActionButton(tradePanel.transform, "Mat Hang Truoc", new Vector2(0.08f, 0.34f), new Vector2(0.44f, 0.42f), SelectPreviousItem);
-            CreateActionButton(tradePanel.transform, "Mat Hang Sau", new Vector2(0.56f, 0.34f), new Vector2(0.92f, 0.42f), SelectNextItem);
+            CreateActionButton(tradePanel.transform, "Mặt Hàng Trước", new Vector2(0.08f, 0.34f), new Vector2(0.44f, 0.42f), SelectPreviousItem);
+            CreateActionButton(tradePanel.transform, "Mặt Hàng Sau", new Vector2(0.56f, 0.34f), new Vector2(0.92f, 0.42f), SelectNextItem);
             CreateActionButton(tradePanel.transform, "Mua 1", new Vector2(0.08f, 0.22f), new Vector2(0.44f, 0.30f), BuySelectedItem);
-            CreateActionButton(tradePanel.transform, "Ban 1", new Vector2(0.56f, 0.22f), new Vector2(0.92f, 0.30f), SellSelectedItem);
-            CreateActionButton(tradePanel.transform, "Sua Ghe", new Vector2(0.08f, 0.10f), new Vector2(0.44f, 0.18f), RepairBoat);
-            CreateActionButton(tradePanel.transform, "Hoi The Luc", new Vector2(0.56f, 0.10f), new Vector2(0.92f, 0.18f), RestoreStamina);
+            CreateActionButton(tradePanel.transform, "Bán 1", new Vector2(0.56f, 0.22f), new Vector2(0.92f, 0.30f), SellSelectedItem);
+            CreateActionButton(tradePanel.transform, "Sửa Ghe", new Vector2(0.08f, 0.10f), new Vector2(0.44f, 0.18f), RepairBoat);
+            CreateActionButton(tradePanel.transform, "Hồi Thể Lực", new Vector2(0.56f, 0.10f), new Vector2(0.92f, 0.18f), RestoreStamina);
 
             newsPanel = CreatePanel("NewsPanel", canvasObject.transform, new Color(0.14f, 0.10f, 0.06f, 0.88f));
             Stretch(newsPanel.GetComponent<RectTransform>(), new Vector2(0.72f, 0.08f), new Vector2(0.98f, 0.44f));
-            CreateText("NewsTitle", newsPanel.transform, 24, TextAnchor.MiddleCenter).text = "TIN DON THI TRUONG";
+            CreateText("NewsTitle", newsPanel.transform, 24, TextAnchor.MiddleCenter).text = "TIN ĐỒN THỊ TRƯỜNG";
             Stretch(newsPanel.transform.Find("NewsTitle").GetComponent<RectTransform>(), new Vector2(0.06f, 0.86f), new Vector2(0.94f, 0.96f));
 
             newsAvatarImage = CreateImage("NpcAvatar", newsPanel.transform);
@@ -202,7 +222,7 @@ namespace ChoNoiMienTay.UI
             newsText = CreateText("NewsText", newsPanel.transform, 20, TextAnchor.UpperLeft);
             Stretch(newsText.rectTransform, new Vector2(0.40f, 0.10f), new Vector2(0.94f, 0.82f));
 
-            CreateActionButton(newsPanel.transform, "Ngu Den Sang", new Vector2(0.06f, 0.08f), new Vector2(0.34f, 0.18f), () =>
+            CreateActionButton(newsPanel.transform, "Ngủ Đến Sáng", new Vector2(0.06f, 0.08f), new Vector2(0.34f, 0.18f), () =>
             {
                 if (timeManager != null)
                 {
@@ -214,15 +234,89 @@ namespace ChoNoiMienTay.UI
             SetPanelVisible(upgradePanel, false);
             SetPanelVisible(tradePanel, false);
             SetPanelVisible(newsPanel, false);
+
+            // Phase Transition Panel (Middle of screen)
+            phaseTransitionPanel = CreatePanel("PhaseTransitionPanel", canvasObject.transform, new Color(0f, 0f, 0f, 0.8f));
+            Stretch(phaseTransitionPanel.GetComponent<RectTransform>(), new Vector2(0.32f, 0.42f), new Vector2(0.68f, 0.58f));
+            
+            
+            phaseTransitionCanvasGroup = phaseTransitionPanel.AddComponent<CanvasGroup>();
+            phaseTransitionCanvasGroup.alpha = 0f;
+            
+            phaseTransitionText = CreateText("PhaseTransitionText", phaseTransitionPanel.transform, 32, TextAnchor.MiddleCenter);
+            phaseTransitionText.font = FontHelper.GameBoldFont;
+            phaseTransitionText.color = new Color(0.92f, 0.82f, 0.55f, 1f); // Gold/Yellow
+            Stretch(phaseTransitionText.rectTransform, Vector2.zero, Vector2.one);
+            
+            phaseTransitionPanel.SetActive(false);
         }
 
         private void HandleTimeChanged(int _, int __) => RefreshStatus();
-        private void HandlePhaseChanged(GamePhase _) => RefreshStatus();
+        private void HandlePhaseChanged(GamePhase phase)
+        {
+            RefreshStatus();
+            ShowPhaseTransition(phase);
+        }
         private void HandleDayChanged(int _) => RefreshAll();
         private void HandleNewsChanged(Infrastructure.MarketNewsEntry _) => RefreshNews();
 
-        private void RefreshAll()
+        private void ShowPhaseTransition(GamePhase phase)
         {
+            if (phaseTransitionPanel == null) return;
+
+            bool isEn = FullSimulatorUI.CurrentLanguage == "en";
+            string phaseStr = "";
+            switch (phase)
+            {
+                case GamePhase.Dawn: phaseStr = isEn ? "DAWN" : "BÌNH MINH"; break;
+                case GamePhase.Day: phaseStr = isEn ? "DAYTIME" : "BAN NGÀY"; break;
+                case GamePhase.Dusk: phaseStr = isEn ? "DUSK" : "CHIỀU TÀ"; break;
+                case GamePhase.Night: phaseStr = isEn ? "NIGHT" : "BAN ĐÊM"; break;
+            }
+
+            phaseTransitionText.text = phaseStr;
+
+            if (phaseTransitionCoroutine != null)
+            {
+                StopCoroutine(phaseTransitionCoroutine);
+            }
+            phaseTransitionCoroutine = StartCoroutine(FadePhaseTransition());
+        }
+
+        private System.Collections.IEnumerator FadePhaseTransition()
+        {
+            phaseTransitionPanel.SetActive(true);
+            phaseTransitionCanvasGroup.alpha = 0f;
+
+            // Fade in
+            float elapsed = 0f;
+            float duration = 0.5f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                phaseTransitionCanvasGroup.alpha = Mathf.Lerp(0f, 1f, elapsed / duration);
+                yield return null;
+            }
+            phaseTransitionCanvasGroup.alpha = 1f;
+
+            // Hold
+            yield return new WaitForSeconds(2.0f);
+
+            // Fade out
+            elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                phaseTransitionCanvasGroup.alpha = Mathf.Lerp(1f, 0f, elapsed / duration);
+                yield return null;
+            }
+            phaseTransitionCanvasGroup.alpha = 0f;
+            phaseTransitionPanel.SetActive(false);
+        }
+
+        public void RefreshAll()
+        {
+            TranslateHUD();
             RefreshStatus();
             RefreshUpgrades();
             RefreshTrade();
@@ -238,6 +332,8 @@ namespace ChoNoiMienTay.UI
         {
             if (statsText == null || timeText == null) return;
 
+            bool isEn = FullSimulatorUI.CurrentLanguage == "en";
+
             string money = playerStats != null ? playerStats.CurrentMoney.ToString("N0") : "0";
             string stamina = playerStats != null ? $"{playerStats.CurrentStamina:0}/{playerStats.MaxStamina:0}" : "0/0";
             string durability = durabilityManager != null ? $"{durabilityManager.CurrentDurability:0}/{durabilityManager.MaxDurability:0}" : "0/0";
@@ -245,10 +341,79 @@ namespace ChoNoiMienTay.UI
             float weight = inventoryManager != null ? inventoryManager.CurrentTotalWeight : 0f;
             float maxWeight = inventoryManager != null ? inventoryManager.MaxWeightCapacity : 100f;
 
-            string dayPhase = timeManager != null ? $"Ngay {timeManager.CurrentDay} | {timeManager.CurrentPhase}" : "Ngay 1 | Dawn";
+            string phaseName = isEn ? "Dawn" : "Bình Minh";
+            if (timeManager != null)
+            {
+                switch (timeManager.CurrentPhase)
+                {
+                    case ChoNoi.Domain.GamePhase.Dawn: phaseName = isEn ? "Dawn" : "Bình Minh"; break;
+                    case ChoNoi.Domain.GamePhase.Day: phaseName = isEn ? "Daytime" : "Ban Ngày"; break;
+                    case ChoNoi.Domain.GamePhase.Dusk: phaseName = isEn ? "Dusk" : "Chiều Tà"; break;
+                    case ChoNoi.Domain.GamePhase.Night: phaseName = isEn ? "Night" : "Ban Đêm"; break;
+                }
+            }
+            string timeClock = timeManager != null ? $"{timeManager.CurrentHour:00}:{timeManager.CurrentMinute:00}" : "03:00";
+            string dayPhase = timeManager != null 
+                ? (isEn ? $"Day {timeManager.CurrentDay} | {phaseName} ({timeClock})" : $"Ngày {timeManager.CurrentDay} | {phaseName} ({timeClock})")
+                : (isEn ? $"Day 1 | Dawn (03:00)" : "Ngày 1 | Bình Minh (03:00)");
 
-            statsText.text = $"Tien: {money} | The luc: {stamina} | Tai trong: {weight:0}/{maxWeight:0} kg | Do ben: {durability}";
+            statsText.text = isEn 
+                ? $"Money: {money}đ | Stamina: {stamina} | Weight: {weight:0}/{maxWeight:0} kg | Durability: {durability}"
+                : $"Tiền: {money}đ | Thể lực: {stamina} | Tải trọng: {weight:0}/{maxWeight:0} kg | Độ bền: {durability}";
             timeText.text = $"{dayPhase}";
+        }
+
+        private void TranslateHUD()
+        {
+            bool isEn = FullSimulatorUI.CurrentLanguage == "en";
+            
+            if (upgradePanel != null)
+            {
+                Transform title = upgradePanel.transform.Find("Title");
+                if (title != null) title.GetComponent<Text>().text = isEn ? "BOAT UPGRADES" : "NÂNG CẤP GHE";
+
+                string[] viUpgrades = { "Khoang Chứa", "Động Cơ", "Lợp Mái", "Cây Bẹo", "Đóng" };
+                string[] enUpgrades = { "Storage", "Engine", "Roof", "Bamboo Pole", "Close" };
+
+                for (int i = 0; i < viUpgrades.Length; i++)
+                {
+                    Transform btn = upgradePanel.transform.Find(viUpgrades[i]);
+                    if (btn == null) btn = upgradePanel.transform.Find(enUpgrades[i]);
+                    if (btn != null)
+                    {
+                        btn.name = isEn ? enUpgrades[i] : viUpgrades[i];
+                        btn.transform.Find("Label").GetComponent<Text>().text = isEn ? enUpgrades[i] : viUpgrades[i];
+                    }
+                }
+            }
+
+            if (tradePanel != null)
+            {
+                string[] viTrades = { "Mặt Hàng Trước", "Mặt Hàng Sau", "Mua 1", "Bán 1", "Sửa Ghe", "Hồi Thể Lực" };
+                string[] enTrades = { "Prev Item", "Next Item", "Buy 1", "Sell 1", "Repair Boat", "Rest Stamina" };
+
+                for (int i = 0; i < viTrades.Length; i++)
+                {
+                    Transform btn = tradePanel.transform.Find(viTrades[i]);
+                    if (btn == null) btn = tradePanel.transform.Find(enTrades[i]);
+                    if (btn != null)
+                    {
+                        btn.name = isEn ? enTrades[i] : viTrades[i];
+                        btn.transform.Find("Label").GetComponent<Text>().text = isEn ? enTrades[i] : viTrades[i];
+                    }
+                }
+            }
+
+            if (newsPanel != null)
+            {
+                Transform btn = newsPanel.transform.Find("Ngủ Đến Sáng");
+                if (btn == null) btn = newsPanel.transform.Find("Sleep Till Dawn");
+                if (btn != null)
+                {
+                    btn.name = isEn ? "Sleep Till Dawn" : "Ngủ Đến Sáng";
+                    btn.transform.Find("Label").GetComponent<Text>().text = isEn ? "Sleep Till Dawn" : "Ngủ Đến Sáng";
+                }
+            }
         }
 
         private void RefreshUpgrades()
@@ -261,10 +426,10 @@ namespace ChoNoiMienTay.UI
             Infrastructure.RoofUpgradeTier roofTier = boatCampManager.UpgradeCatalog.GetRoofTier(boatCampManager.hasRoof ? 1 : 0);
 
             upgradeText.text =
-                $"Khoang: Cap {boatCampManager.StorageLevel} | Tiep: {(storageTier != null ? storageTier.costMoney.ToString("N0") : "MAX")}\n" +
-                $"Dong co: Cap {boatCampManager.engineLevel} | Tiep: {(engineTier != null ? engineTier.costMoney.ToString("N0") : "MAX")}\n" +
-                $"Mai che: {(boatCampManager.hasRoof ? "Da lap" : (roofTier != null ? roofTier.costMoney.ToString("N0") : "MAX"))}\n" +
-                $"Cay Beo: Cap {boatCampManager.bambooPoleLevel} | Tiep: {(bambooTier != null ? bambooTier.costMoney.ToString("N0") : "MAX")}";
+                $"Khoang chứa: Cấp {boatCampManager.StorageLevel} | Tiếp: {(storageTier != null ? storageTier.costMoney.ToString("N0") + "đ" : "TỐI ĐA")}\n" +
+                $"Động cơ: Cấp {boatCampManager.engineLevel} | Tiếp: {(engineTier != null ? engineTier.costMoney.ToString("N0") + "đ" : "TỐI ĐA")}\n" +
+                $"Mái che: {(boatCampManager.hasRoof ? "Đã lợp" : (roofTier != null ? roofTier.costMoney.ToString("N0") + "đ" : "TỐI ĐA"))}\n" +
+                $"Cây Bẹo: Cấp {boatCampManager.bambooPoleLevel} | Tiếp: {(bambooTier != null ? bambooTier.costMoney.ToString("N0") + "đ" : "TỐI ĐA")}";
         }
 
         private void RefreshTrade()
@@ -275,7 +440,7 @@ namespace ChoNoiMienTay.UI
             ItemData currentItem = GetSelectedMarketItem();
             if (currentItem == null)
             {
-                tradeText.text = "Chua co du lieu hang hoa de giao dich.";
+                tradeText.text = "Chưa có dữ liệu hàng hóa để giao dịch.";
                 return;
             }
 
@@ -290,9 +455,9 @@ namespace ChoNoiMienTay.UI
             int repairCost = GetRepairCost();
             tradeText.text =
                 $"{currentItem.itemName} ({currentItem.itemID})\n" +
-                $"Gia mua: {buyPrice:N0} | Gia ban: {sellPrice:N0}\n" +
-                $"Ton kho: {currentOwned} | Nang: {currentItem.weight:0.0} kg\n" +
-                $"Sua ghe: {repairCost:N0} | The luc hoi: 8,000";
+                $"Giá mua: {buyPrice:N0}đ | Giá bán: {sellPrice:N0}đ\n" +
+                $"Tồn kho: {currentOwned} | Nặng: {currentItem.weight:0.0} kg\n" +
+                $"Sửa ghe: {repairCost:N0}đ | Thể lực hồi: 8,000";
         }
 
         private void RefreshNews()
@@ -302,10 +467,10 @@ namespace ChoNoiMienTay.UI
             Infrastructure.MarketNewsEntry entry = marketNewsController != null ? marketNewsController.CurrentNews : null;
             if (entry == null)
             {
-                newsNpcNameText.text = "Khong co NPC";
+                newsNpcNameText.text = "Không có NPC";
                 newsAvatarImage.sprite = null;
                 newsAvatarImage.color = new Color(1f, 1f, 1f, 0.15f);
-                newsText.text = "Chua co tin don thi truong duoc cap nhat.";
+                newsText.text = "Chưa có tin đồn thị trường được cập nhật.";
                 return;
             }
 
@@ -427,9 +592,28 @@ namespace ChoNoiMienTay.UI
 
         private GameObject CreatePanel(string name, Transform parent, Color color)
         {
-            GameObject panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            panel.GetComponent<Image>().color = color;
+            bool useSVG = (name != "LeftPromptPanel" && name != "RightPromptPanel" && name != "TopBar" &&
+                           name != "Background" && name != "Fill" && name != "Bg" &&
+                           !name.Contains("Slider") && !name.Contains("Scroll"));
+
+            GameObject panel;
+            Sprite sp = GetPanelBackgroundSprite();
+            if (useSVG && sp != null)
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                Image img = panel.GetComponent<Image>();
+                img.sprite = sp;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+            }
+            else
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                panel.GetComponent<Image>().color = color;
+            }
+
             return panel;
         }
 
@@ -438,7 +622,7 @@ namespace ChoNoiMienTay.UI
             GameObject textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             Text text = textObject.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = FontHelper.GameFont;
             text.fontSize = fontSize;
             text.alignment = alignment;
             text.color = Color.white;
@@ -457,19 +641,74 @@ namespace ChoNoiMienTay.UI
             return image;
         }
 
-        private void CreateActionButton(Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction onClick)
+        private Button CreateActionButton(Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction onClick)
         {
-            GameObject buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(parent, false);
-            Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
-            buttonObject.GetComponent<Image>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
-            Button button = buttonObject.GetComponent<Button>();
-            button.onClick.AddListener(onClick);
+            GameObject buttonObject;
+            if (buttonSpriteNormal != null)
+            {
+                buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
+                Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
+
+                Image img = buttonObject.GetComponent<Image>();
+                img.sprite = buttonSpriteNormal;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = img;
+                button.transition = Selectable.Transition.SpriteSwap;
+                SpriteState state = new SpriteState();
+                state.highlightedSprite = buttonSpriteHover != null ? buttonSpriteHover : buttonSpriteNormal;
+                state.pressedSprite = buttonSpritePressed != null ? buttonSpritePressed : buttonSpriteNormal;
+                button.spriteState = state;
+            }
+            else
+            {
+                buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
+                Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
+
+                Image img = buttonObject.GetComponent<Image>();
+                img.color = new Color(0.88f, 0.71f, 0.34f, 1f);
+
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = img;
+            }
+
+            Button btnComp = buttonObject.GetComponent<Button>();
+            if (onClick != null)
+            {
+                btnComp.onClick.RemoveAllListeners();
+                btnComp.onClick.AddListener(onClick);
+            }
 
             Text text = CreateText("Label", buttonObject.transform, 20, TextAnchor.MiddleCenter);
-            text.text = label;
-            text.color = new Color(0.10f, 0.08f, 0.05f, 1f);
             Stretch(text.rectTransform, Vector2.zero, Vector2.one);
+            text.font = FontHelper.GameBoldFont;
+            text.text = label;
+            text.color = Color.white;
+
+            btnComp.onClick.AddListener(() => {
+                SoundManager.Instance.PlaySFX("click");
+            });
+
+            EventTrigger trigger = buttonObject.GetComponent<EventTrigger>();
+            if (trigger == null) trigger = buttonObject.AddComponent<EventTrigger>();
+            
+            EventTrigger.Entry entry = new EventTrigger.Entry();
+            entry.eventID = EventTriggerType.PointerEnter;
+            entry.callback.AddListener((data) => {
+                SoundManager.Instance.PlaySFX("hover");
+            });
+            trigger.triggers.Add(entry);
+
+            return btnComp;
+        }
+
+        private Sprite GetPanelBackgroundSprite()
+        {
+            return panelBgSprite;
         }
 
         private void Stretch(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax)

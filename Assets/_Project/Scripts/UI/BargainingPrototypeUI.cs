@@ -7,6 +7,7 @@ using ChoNoiMienTay.Data;
 using ChoNoiMienTay.Infrastructure;
 using ChoNoiMienTay.Presentation;
 using ChoNoiMienTay.Systems;
+using ChoNoi.UI;
 
 namespace ChoNoiMienTay.UI
 {
@@ -41,6 +42,12 @@ namespace ChoNoiMienTay.UI
         private GameObject bargainScreen;
         private readonly List<Button> inventoryButtons = new List<Button>();
         private readonly List<GameObject> npcCards = new List<GameObject>();
+
+        [Header("Casual GUI Sprites")]
+        public Sprite panelBgSprite;
+        public Sprite buttonSpriteNormal;
+        public Sprite buttonSpriteHover;
+        public Sprite buttonSpritePressed;
 
         private PrototypeScreen currentScreen = PrototypeScreen.Inventory;
         private bool isHidden = true;
@@ -543,9 +550,23 @@ namespace ChoNoiMienTay.UI
 
         private GameObject CreatePanel(string name, Transform parent, Color color)
         {
-            GameObject panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            panel.GetComponent<Image>().color = color;
+            GameObject panel;
+            if (panelBgSprite != null)
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                Image img = panel.GetComponent<Image>();
+                img.sprite = panelBgSprite;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+            }
+            else
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                panel.GetComponent<Image>().color = color;
+            }
+
             return panel;
         }
 
@@ -554,7 +575,7 @@ namespace ChoNoiMienTay.UI
             GameObject textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             Text text = textObject.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = FontHelper.GameFont;
             text.fontSize = fontSize;
             text.alignment = alignment;
             text.color = Color.white;
@@ -575,24 +596,48 @@ namespace ChoNoiMienTay.UI
 
         private Button CreateButton(string name, Transform parent, string label)
         {
-            GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(parent, false);
+            GameObject buttonObject;
+            if (buttonSpriteNormal != null)
+            {
+                buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
 
-            Image background = buttonObject.GetComponent<Image>();
-            background.color = new Color(0.86f, 0.73f, 0.46f, 1f);
+                Image background = buttonObject.GetComponent<Image>();
+                background.sprite = buttonSpriteNormal;
+                background.type = Image.Type.Sliced;
+                background.color = Color.white;
 
-            Button button = buttonObject.GetComponent<Button>();
-            ColorBlock colors = button.colors;
-            colors.highlightedColor = new Color(0.95f, 0.82f, 0.58f, 1f);
-            colors.pressedColor = new Color(0.72f, 0.58f, 0.33f, 1f);
-            colors.disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.9f);
-            button.colors = colors;
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = background;
+                button.transition = Selectable.Transition.SpriteSwap;
+                SpriteState state = new SpriteState();
+                state.highlightedSprite = buttonSpriteHover != null ? buttonSpriteHover : buttonSpriteNormal;
+                state.pressedSprite = buttonSpritePressed != null ? buttonSpritePressed : buttonSpriteNormal;
+                button.spriteState = state;
+            }
+            else
+            {
+                buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
 
+                Image background = buttonObject.GetComponent<Image>();
+                background.color = new Color(0.86f, 0.73f, 0.46f, 1f);
+
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = background;
+                ColorBlock colors = button.colors;
+                colors.highlightedColor = new Color(0.95f, 0.82f, 0.58f, 1f);
+                colors.pressedColor = new Color(0.72f, 0.58f, 0.33f, 1f);
+                colors.disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.9f);
+                button.colors = colors;
+            }
+
+            Button btnComp = buttonObject.GetComponent<Button>();
             Text text = CreateText("Label", buttonObject.transform, 24, TextAnchor.MiddleCenter);
             text.text = label;
-            text.color = new Color(0.16f, 0.12f, 0.07f, 1f);
+            text.color = buttonSpriteNormal != null ? Color.white : new Color(0.16f, 0.12f, 0.07f, 1f);
             Stretch(text.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            return button;
+            return btnComp;
         }
 
         private void CreateTitle(Transform parent, string title)

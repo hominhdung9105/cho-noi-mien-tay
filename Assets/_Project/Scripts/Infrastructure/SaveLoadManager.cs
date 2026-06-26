@@ -28,6 +28,7 @@ namespace ChoNoi.Infrastructure
     public class GameSaveData
     {
         public int currentDay;
+        public float currentTimeMinutes;
         public int currentMoney;
         public float currentStamina;
         public float maxStamina;
@@ -64,6 +65,45 @@ namespace ChoNoi.Infrastructure
 
         private string SavePath => UnityEngine.Application.persistentDataPath + "/gamesave.json";
 
+        public bool HasSaveFile => File.Exists(SavePath);
+
+        public void NewGame()
+        {
+            if (File.Exists(SavePath))
+            {
+                File.Delete(SavePath);
+            }
+
+            if (playerStats != null)
+            {
+                playerStats.LoadStats(100000, 100f, 100f, 0.5f);
+            }
+
+            if (timeManager != null)
+            {
+                timeManager.ResetTime();
+            }
+
+            if (boatCampManager != null)
+            {
+                boatCampManager.LoadData(0, false, 0, 0, 1f);
+            }
+
+            if (durabilityManager != null)
+            {
+                durabilityManager.LoadDurability(100f);
+            }
+
+            if (bambooPoleManager != null)
+            {
+                bambooPoleManager.ClearPole();
+            }
+
+            SeedFreshGame();
+            SaveGame();
+            Debug.Log("[SaveLoadManager] New game initialized and saved.");
+        }
+
         private void OnEnable()
         {
             if (timeManager != null)
@@ -92,6 +132,7 @@ namespace ChoNoi.Infrastructure
             if (playerStats != null)
             {
                 data.currentDay = timeManager != null ? timeManager.CurrentDay : 1;
+                data.currentTimeMinutes = timeManager != null ? timeManager.MinutesOfDay : 180f;
                 data.currentMoney = playerStats.CurrentMoney;
                 data.currentStamina = playerStats.CurrentStamina;
                 data.maxStamina = playerStats.MaxStamina;
@@ -195,6 +236,7 @@ namespace ChoNoi.Infrastructure
             if (timeManager != null)
             {
                 timeManager.LoadDay(data.currentDay);
+                timeManager.MinutesOfDay = data.currentTimeMinutes > 0f ? data.currentTimeMinutes : 180f;
             }
 
             if (inventoryManager != null)

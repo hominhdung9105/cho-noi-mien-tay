@@ -56,9 +56,38 @@ namespace ChoNoiMienTay.Editor
             prototypeUI.Configure(bargainingSystem, playerStats, inventoryManager);
 
             // 5. Attach FullSimulatorUI for Tutorial, Settings, Dialogue, Marketing
-            FullSimulatorUI fullUI = systemsRoot.AddComponent<FullSimulatorUI>();
+            FullSimulatorUI fullUI = systemsRoot.GetComponent<FullSimulatorUI>();
+            if (fullUI == null)
+            {
+                fullUI = systemsRoot.AddComponent<FullSimulatorUI>();
+            }
             fullUI.inventoryManager = inventoryManager;
             fullUI.riverMarketHUD = systemsRoot.GetComponent<RiverMarketHUD>();
+
+            // Load rasterized PNG sprites from Art/UI (supporting native 9-slicing)
+            fullUI.panelBgSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/UI/panel_lobby.png");
+            fullUI.buttonSpriteNormal = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/UI/button_soft_orange.png");
+            fullUI.buttonSpriteHover = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/UI/button_plain_orangeyellow.png");
+            fullUI.buttonSpritePressed = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_Project/Art/UI/button_soft_blue.png");
+
+            // Load and assign to RiverMarketHUD as well
+            RiverMarketHUD hud = systemsRoot.GetComponent<RiverMarketHUD>();
+            if (hud != null)
+            {
+                hud.panelBgSprite = fullUI.panelBgSprite;
+                hud.buttonSpriteNormal = fullUI.buttonSpriteNormal;
+                hud.buttonSpriteHover = fullUI.buttonSpriteHover;
+                hud.buttonSpritePressed = fullUI.buttonSpritePressed;
+            }
+
+            // Load and assign to BargainingPrototypeUI as well
+            if (prototypeUI != null)
+            {
+                prototypeUI.panelBgSprite = fullUI.panelBgSprite;
+                prototypeUI.buttonSpriteNormal = fullUI.buttonSpriteNormal;
+                prototypeUI.buttonSpriteHover = fullUI.buttonSpriteHover;
+                prototypeUI.buttonSpritePressed = fullUI.buttonSpritePressed;
+            }
 
             GameObject boat = GameObject.Find("PlayerBoat");
             if (boat != null)
@@ -74,6 +103,13 @@ namespace ChoNoiMienTay.Editor
             ConfigureTradeTarget("Villager_B", InteractionTargetType.Trade);
             ConfigureTradeTarget("Villager_C", InteractionTargetType.Trade);
             ConfigureTradeTarget("WoodPost", InteractionTargetType.Upgrade);
+
+            // Set dirty on modified components to ensure they are serialized and saved
+            EditorUtility.SetDirty(systemsRoot);
+            EditorUtility.SetDirty(fullUI);
+            if (prototypeUI != null) EditorUtility.SetDirty(prototypeUI);
+            if (bargainingSystem != null) EditorUtility.SetDirty(bargainingSystem);
+            if (hud != null) EditorUtility.SetDirty(hud);
 
             // Save the scene
             EditorSceneManager.SaveScene(scene);

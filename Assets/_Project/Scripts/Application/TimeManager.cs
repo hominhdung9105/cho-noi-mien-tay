@@ -43,6 +43,20 @@ namespace ChoNoi.Application
         public GamePhase CurrentPhase => currentPhase;
         public int CurrentDay { get; private set; } = 1;
 
+        public float MinutesOfDay
+        {
+            get => minutesOfDay;
+            set
+            {
+                minutesOfDay = Mathf.Repeat(value, 1440f);
+                lastMinute = -1; // Force time update
+                currentPhase = GetPhaseForHour(Hour);
+                initialized = true;
+                OnTimeChanged?.Invoke(Hour, Minute);
+                OnPhaseChanged?.Invoke(currentPhase);
+            }
+        }
+
         public void Sleep()
         {
             // Cho phép ngủ vào buổi tối hoặc chạng vạng
@@ -65,10 +79,24 @@ namespace ChoNoi.Application
             }
         }
 
+        public int CurrentHour => Hour;
+        public int CurrentMinute => Minute;
+
         public void LoadDay(int savedDay)
         {
             CurrentDay = Mathf.Max(1, savedDay);
             OnDayChanged?.Invoke(CurrentDay);
+        }
+
+        public void ResetTime()
+        {
+            CurrentDay = 1;
+            minutesOfDay = DawnHour * 60f;
+            lastMinute = -1;
+            currentPhase = GamePhase.Dawn;
+            OnDayChanged?.Invoke(CurrentDay);
+            OnTimeChanged?.Invoke(Hour, Minute);
+            OnPhaseChanged?.Invoke(currentPhase);
         }
 
         private void Start()

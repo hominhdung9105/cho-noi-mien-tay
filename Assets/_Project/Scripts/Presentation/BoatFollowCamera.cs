@@ -81,6 +81,22 @@ namespace ChoNoi.Presentation
                     orbitYaw += mouseDelta.x * sensitivity;
                     orbitPitch = Mathf.Clamp(orbitPitch - mouseDelta.y * sensitivity, minPitch, maxPitch);
                 }
+                else
+                {
+                    bool pressingMove = false;
+                    if (Keyboard.current != null)
+                    {
+                        pressingMove = Keyboard.current.wKey.isPressed || Keyboard.current.sKey.isPressed || 
+                                       Keyboard.current.aKey.isPressed || Keyboard.current.dKey.isPressed ||
+                                       Keyboard.current.upArrowKey.isPressed || Keyboard.current.downArrowKey.isPressed ||
+                                       Keyboard.current.leftArrowKey.isPressed || Keyboard.current.rightArrowKey.isPressed;
+                    }
+                    
+                    if (pressingMove)
+                    {
+                        orbitYaw = Mathf.LerpAngle(orbitYaw, target.eulerAngles.y, 3.0f * Time.deltaTime);
+                    }
+                }
 
                 Quaternion worldRotation = Quaternion.Euler(orbitPitch, orbitYaw, 0f);
                 Vector3 onFootLookTarget = target.position + Vector3.up * onFootTargetHeight;

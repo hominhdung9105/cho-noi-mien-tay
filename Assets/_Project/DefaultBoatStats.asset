@@ -15,4 +15,4 @@ MonoBehaviour:
   thrustForce: 15
   waterDrag: 1.5
   sidewaysDrag: 6
-  turnTorque: 4
+  turnTorque: 6.5

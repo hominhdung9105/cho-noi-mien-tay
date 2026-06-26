@@ -41,7 +41,7 @@ namespace ChoNoi.Presentation
         [SerializeField] private float durabilityWearPerSpeed = 0.012f;
         [SerializeField] private float collisionDamageMultiplier = 1.4f;
         [SerializeField] private float maxStableVerticalSpeed = 3.5f;
-        [SerializeField] private float maxAngularSpeed = 1.85f;
+        [SerializeField] private float maxAngularSpeed = 3.2f;
 
         private Rigidbody rb;
         private IBoatInput boatInput;
@@ -270,7 +270,7 @@ namespace ChoNoi.Presentation
         {
             // T_steer = up * steering * turnTorque * |velocity| * performance
             rb.AddTorque(
-                transform.up * steering * boatStats.TurnTorque * Mathf.Max(rb.linearVelocity.magnitude, 1.35f) * performance,
+                transform.up * steering * boatStats.TurnTorque * Mathf.Max(rb.linearVelocity.magnitude, 2.8f) * performance,
                 ForceMode.Acceleration
             );
         }

@@ -25,11 +25,36 @@ namespace ChoNoi.UI
         public PlayerStats playerStats;
         public BoatCampManager boatCampManager;
 
+        [Header("Casual GUI Sprites")]
+        public Sprite panelBgSprite;
+        public Sprite buttonSpriteNormal;
+        public Sprite buttonSpriteHover;
+        public Sprite buttonSpritePressed;
+
         private GameObject canvasObject;
         private GameObject tutorialPanel;
         private GameObject marketingPanel;
         private GameObject dialoguePanel;
         private GameObject settingsPanel;
+        private GameObject pausePanel;
+        private GameObject splashPanel;
+        private GameObject homePanel;
+        private Button topTutorialButton;
+        private Button topSettingsButton;
+        private bool wasOpenedFromPause = false;
+        private bool isInGameplay = false;
+        
+        // Settings states
+        private float soundVolume = 1f;
+        private int graphicsQuality = 2;
+        private string currentLanguage = "vi";
+        
+        // Global static language variable
+        public static string CurrentLanguage = "vi";
+
+        private Text volumeLabelText;
+        private Button graphicsSettingButton;
+        private Button languageSettingButton;
 
         private Text marketingText;
         private Text dialogueText;
@@ -124,6 +149,12 @@ namespace ChoNoi.UI
         private readonly List<GameObject> createdUIElements = new List<GameObject>();
 
         public bool IsDialogueOpen => dialoguePanel != null && dialoguePanel.activeSelf;
+        public bool IsMarketingOpen => marketingPanel != null && marketingPanel.activeSelf;
+        public bool IsPauseOpen => pausePanel != null && pausePanel.activeSelf;
+        public bool IsSettingsOpen => settingsPanel != null && settingsPanel.activeSelf;
+        public bool IsTutorialOpen => tutorialPanel != null && tutorialPanel.activeSelf;
+        public bool IsYardOpen => boatYardPanel != null && boatYardPanel.activeSelf;
+        public bool IsTradeQtyOpen => tradeQuantityPanel != null && tradeQuantityPanel.activeSelf;
 
         private void Start()
         {
@@ -151,6 +182,16 @@ namespace ChoNoi.UI
             }
 
             BuildExtraUI();
+
+            var playerController = FindAnyObjectByType<ShorePlayerController>();
+            if (playerController != null)
+                playerController.CanMove = false;
+
+            var boarding = FindAnyObjectByType<BoatBoardingController>();
+            if (boarding != null)
+            {
+                boarding.SetBoatControlActive(false);
+            }
         }
 
         private void Update()
@@ -168,12 +209,33 @@ namespace ChoNoi.UI
                 }
             }
 
-            // Escape key closes dialogue or marketing
+            // Escape key closes dialogue, panels, or pauses/resumes the game
             if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 if (marketingPanel != null && marketingPanel.activeSelf)
                 {
                     CloseMarketingPanel();
+                }
+                else if (tutorialPanel != null && tutorialPanel.activeSelf)
+                {
+                    tutorialPanel.SetActive(false);
+                    UpdateCursorState();
+                }
+                else if (settingsPanel != null && settingsPanel.activeSelf)
+                {
+                    ToggleSettings();
+                }
+                else if (pausePanel != null && pausePanel.activeSelf)
+                {
+                    TogglePause();
+                }
+                else if (IsDialogueOpen)
+                {
+                    CloseAllDialogueAndPanels();
+                }
+                else
+                {
+                    TogglePause();
                 }
             }
 
@@ -202,8 +264,8 @@ namespace ChoNoi.UI
             EnsureEventSystem();
 
             // Top right buttons for new features
-            CreateActionButton(canvasObject.transform, "Huong Dan", new Vector2(0.66f, 0.90f), new Vector2(0.73f, 0.96f), ToggleTutorial);
-            CreateActionButton(canvasObject.transform, "Cai Dat", new Vector2(0.58f, 0.90f), new Vector2(0.65f, 0.96f), ToggleSettings);
+            topTutorialButton = CreateActionButton(canvasObject.transform, "Hướng Dẫn", new Vector2(0.66f, 0.90f), new Vector2(0.73f, 0.96f), ToggleTutorial);
+            topSettingsButton = CreateActionButton(canvasObject.transform, "Cài Đặt", new Vector2(0.58f, 0.90f), new Vector2(0.65f, 0.96f), ToggleSettings);
 
             // Left & Right Prompts Panel (Middle-sides)
             leftPromptPanel = CreatePanel("LeftPromptPanel", canvasObject.transform, new Color(0.08f, 0.08f, 0.08f, 0.85f));
@@ -221,43 +283,68 @@ namespace ChoNoi.UI
             // Tutorial Panel
             tutorialPanel = CreatePanel("TutorialPanel", canvasObject.transform, new Color(0.1f, 0.1f, 0.1f, 0.95f));
             Stretch(tutorialPanel.GetComponent<RectTransform>(), new Vector2(0.2f, 0.2f), new Vector2(0.8f, 0.8f));
-            CreateText("Title", tutorialPanel.transform, 32, TextAnchor.MiddleCenter).text = "HUONG DAN CHOI";
+            CreateText("Title", tutorialPanel.transform, 32, TextAnchor.MiddleCenter).text = "HƯỚNG DẪN CHƠI";
             Stretch(tutorialPanel.transform.Find("Title").GetComponent<RectTransform>(), new Vector2(0.05f, 0.85f), new Vector2(0.95f, 0.95f));
             Text tutText = CreateText("Body", tutorialPanel.transform, 24, TextAnchor.UpperLeft);
-            tutText.text = "1. Binh Minh (3AM - 10AM): Lai ghe ra cho, treo hang len Cay Beo de ban.\n\n" +
-                           "2. Tra Gia: Su dung the luc de Noi Ngot hoac Ton hang de Tang Qua.\n\n" +
-                           "3. Chieu Ta (1PM - 6PM): Vao rach nho thu mua nong san hoac ve Trai Ghe de bao tri.\n\n" +
-                           "4. Nang Cap: Mo rong khoang chua, nang cap dong co de ghe chay nhanh hon.";
+            tutText.name = "Body";
+            tutText.text = "1. Bình Minh (3AM - 10AM): Lái ghe ra chợ, treo hàng lên Cây Bẹo để bán lẻ/sỉ.\n\n" +
+                           "2. Trả Giá: Sử dụng thể lực để Nói Ngọt hoặc tốn hàng để Tặng Quà nâng thiện cảm.\n\n" +
+                           "3. Chiều Tà (1PM - 6PM): Vào rạch nhỏ thu mua nông sản giá gốc hoặc về Trại Ghe.\n\n" +
+                           "4. Nâng Cấp: Mở rộng khoang chứa, nâng cấp động cơ và lắp mái che.";
             Stretch(tutText.rectTransform, new Vector2(0.05f, 0.15f), new Vector2(0.95f, 0.80f));
-            CreateActionButton(tutorialPanel.transform, "Dong", new Vector2(0.4f, 0.05f), new Vector2(0.6f, 0.12f), ToggleTutorial);
+            CreateActionButton(tutorialPanel.transform, "Đóng", new Vector2(0.4f, 0.05f), new Vector2(0.6f, 0.12f), ToggleTutorial);
             tutorialPanel.SetActive(false);
 
-            // Settings Panel
+            // Settings Panel - expanded layout with volume slider, graphics quality, language toggle
             settingsPanel = CreatePanel("SettingsPanel", canvasObject.transform, new Color(0.1f, 0.1f, 0.2f, 0.95f));
-            Stretch(settingsPanel.GetComponent<RectTransform>(), new Vector2(0.3f, 0.3f), new Vector2(0.7f, 0.7f));
-            CreateText("Title", settingsPanel.transform, 32, TextAnchor.MiddleCenter).text = "CAI DAT";
-            Stretch(settingsPanel.transform.Find("Title").GetComponent<RectTransform>(), new Vector2(0.05f, 0.80f), new Vector2(0.95f, 0.95f));
-            CreateActionButton(settingsPanel.transform, "Am Thanh: ON", new Vector2(0.2f, 0.5f), new Vector2(0.8f, 0.65f), () => {});
-            CreateActionButton(settingsPanel.transform, "Do Hoa: CAO", new Vector2(0.2f, 0.3f), new Vector2(0.8f, 0.45f), () => {});
-            CreateActionButton(settingsPanel.transform, "Dong", new Vector2(0.4f, 0.05f), new Vector2(0.6f, 0.2f), ToggleSettings);
+            Stretch(settingsPanel.GetComponent<RectTransform>(), new Vector2(0.28f, 0.2f), new Vector2(0.72f, 0.8f));
+            CreateText("Title", settingsPanel.transform, 32, TextAnchor.MiddleCenter).text = "CÀI ĐẶT";
+            Stretch(settingsPanel.transform.Find("Title").GetComponent<RectTransform>(), new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.95f));
+            
+            // Volume control
+            volumeLabelText = CreateText("VolumeLabel", settingsPanel.transform, 20, TextAnchor.MiddleCenter);
+            volumeLabelText.text = "Âm Lượng: 100%";
+            Stretch(volumeLabelText.rectTransform, new Vector2(0.1f, 0.68f), new Vector2(0.9f, 0.78f));
+            CreateSlider(settingsPanel.transform, 0f, 1f, soundVolume, new Vector2(0.2f, 0.56f), new Vector2(0.8f, 0.64f), ChangeVolume);
+
+            // Graphics quality control
+            graphicsSettingButton = CreateActionButton(settingsPanel.transform, "Đồ Họa: CAO", new Vector2(0.2f, 0.38f), new Vector2(0.8f, 0.50f), CycleGraphics);
+            
+            // Language control
+            languageSettingButton = CreateActionButton(settingsPanel.transform, "Ngôn Ngữ: TIẾNG VIỆT", new Vector2(0.2f, 0.22f), new Vector2(0.8f, 0.34f), ToggleLanguage);
+            
+            // Close settings button
+            CreateActionButton(settingsPanel.transform, "Đóng", new Vector2(0.4f, 0.05f), new Vector2(0.6f, 0.17f), ToggleSettings);
             settingsPanel.SetActive(false);
+
+            // Pause Panel - expanded to 4 buttons (includes Return to Home)
+            pausePanel = CreatePanel("PausePanel", canvasObject.transform, new Color(0.05f, 0.05f, 0.05f, 0.95f));
+            Stretch(pausePanel.GetComponent<RectTransform>(), new Vector2(0.35f, 0.2f), new Vector2(0.65f, 0.8f));
+            CreateText("Title", pausePanel.transform, 32, TextAnchor.MiddleCenter).text = "TẠM DỪNG";
+            Stretch(pausePanel.transform.Find("Title").GetComponent<RectTransform>(), new Vector2(0.05f, 0.82f), new Vector2(0.95f, 0.95f));
+            
+            CreateActionButton(pausePanel.transform, "Tiếp Tục", new Vector2(0.2f, 0.65f), new Vector2(0.8f, 0.77f), TogglePause);
+            CreateActionButton(pausePanel.transform, "Cài Đặt", new Vector2(0.2f, 0.48f), new Vector2(0.8f, 0.60f), OpenSettingsFromPause);
+            CreateActionButton(pausePanel.transform, "Quay Lại Trang Chủ", new Vector2(0.2f, 0.31f), new Vector2(0.8f, 0.43f), ReturnToHome);
+            CreateActionButton(pausePanel.transform, "Thoát Game", new Vector2(0.2f, 0.14f), new Vector2(0.8f, 0.26f), QuitGame);
+            pausePanel.SetActive(false);
 
             // Marketing Panel (Cargo & Cay Beo) - Stretched side-by-side drag and drop UI with tabs
             marketingPanel = CreatePanel("MarketingPanel", canvasObject.transform, new Color(0.12f, 0.18f, 0.14f, 0.96f));
             Stretch(marketingPanel.GetComponent<RectTransform>(), new Vector2(0.15f, 0.15f), new Vector2(0.85f, 0.85f));
             
-            CreateText("Title", marketingPanel.transform, 28, TextAnchor.MiddleCenter).text = "QUAN LY KHOANG THUYEN & CAY BEO";
+            CreateText("Title", marketingPanel.transform, 28, TextAnchor.MiddleCenter).text = "QUẢN LÝ KHOANG THUYỀN & CÂY BẸO";
             Stretch(marketingPanel.transform.Find("Title").GetComponent<RectTransform>(), new Vector2(0.05f, 0.90f), new Vector2(0.95f, 0.98f));
 
             // Create Tab Buttons at the top (below title)
-            tabButton1 = CreateActionButton(marketingPanel.transform, "KHOANG THUYEN", new Vector2(0.20f, 0.81f), new Vector2(0.48f, 0.88f), () => SetCargoTab(0));
-            tabButton2 = CreateActionButton(marketingPanel.transform, "CAY BEO", new Vector2(0.52f, 0.81f), new Vector2(0.80f, 0.88f), () => SetCargoTab(1));
+            tabButton1 = CreateActionButton(marketingPanel.transform, "KHOANG THUYỀN", new Vector2(0.20f, 0.81f), new Vector2(0.48f, 0.88f), () => SetCargoTab(0));
+            tabButton2 = CreateActionButton(marketingPanel.transform, "CÂY BẸO", new Vector2(0.52f, 0.81f), new Vector2(0.80f, 0.88f), () => SetCargoTab(1));
 
             // 1. Khoang Thuyen Tab Content
             khoangThuyenTabContent = CreatePanel("KhoangThuyenTabContent", marketingPanel.transform, new Color(0.08f, 0.10f, 0.12f, 0.9f));
             Stretch(khoangThuyenTabContent.GetComponent<RectTransform>(), new Vector2(0.04f, 0.12f), new Vector2(0.96f, 0.80f));
 
-            CreateText("CargoHeader", khoangThuyenTabContent.transform, 22, TextAnchor.MiddleCenter).text = "DANH SACH NONG SAN TRONG KHOANG GHE";
+            CreateText("CargoHeader", khoangThuyenTabContent.transform, 22, TextAnchor.MiddleCenter).text = "DANH SÁCH NÔNG SẢN TRONG KHOANG GHE";
             Stretch(khoangThuyenTabContent.transform.Find("CargoHeader").GetComponent<RectTransform>(), new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.96f));
 
             khoangThuyenListParent = new GameObject("CargoListGrid", typeof(RectTransform), typeof(GridLayoutGroup));
@@ -276,7 +363,7 @@ namespace ChoNoi.UI
             // Left panel for Inventory items
             GameObject invPanel = CreatePanel("InventoryPanel", cayBeoTabContent.transform, new Color(0.08f, 0.12f, 0.10f, 0.9f));
             Stretch(invPanel.GetComponent<RectTransform>(), new Vector2(0.04f, 0.12f), new Vector2(0.46f, 0.80f));
-            CreateText("InvHeader", invPanel.transform, 22, TextAnchor.MiddleCenter).text = "KHO HANG TREN GHE (Keo tha hoac Click chon)";
+            CreateText("InvHeader", invPanel.transform, 22, TextAnchor.MiddleCenter).text = "KHO HÀNG TRÊN GHE (Kéo thả hoặc Click chọn)";
             Stretch(invPanel.transform.Find("InvHeader").GetComponent<RectTransform>(), new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.96f));
             
             inventoryGridParent = new GameObject("InventoryGrid", typeof(RectTransform), typeof(GridLayoutGroup));
@@ -291,7 +378,7 @@ namespace ChoNoi.UI
             // Right panel for Cây Bẹo Slots
             GameObject polePanel = CreatePanel("PolePanel", cayBeoTabContent.transform, new Color(0.18f, 0.15f, 0.10f, 0.9f));
             Stretch(polePanel.GetComponent<RectTransform>(), new Vector2(0.54f, 0.12f), new Vector2(0.96f, 0.80f));
-            CreateText("PoleHeader", polePanel.transform, 22, TextAnchor.MiddleCenter).text = "CAY BEO (CAC MAT HANG DANG TREO)";
+            CreateText("PoleHeader", polePanel.transform, 22, TextAnchor.MiddleCenter).text = "CÂY BẸO (CÁC MẶT HÀNG ĐANG TREO)";
             Stretch(polePanel.transform.Find("PoleHeader").GetComponent<RectTransform>(), new Vector2(0.05f, 0.88f), new Vector2(0.95f, 0.96f));
 
             poleSlotsParent = new GameObject("PoleSlotsGrid", typeof(RectTransform), typeof(VerticalLayoutGroup));
@@ -306,11 +393,11 @@ namespace ChoNoi.UI
 
             // Instructions text at bottom of marketing
             marketingText = CreateText("Instructions", marketingPanel.transform, 18, TextAnchor.MiddleCenter);
-            marketingText.text = "Keo tha hang tu Kho sang Cay Beo. Click vao o Cay Beo co chu Go de tháo dõ.";
+            marketingText.text = "Kéo thả hàng từ Kho sang Cây Bẹo. Click vào ô Cây Bẹo có chữ Gỡ để tháo dỡ.";
             Stretch(marketingText.rectTransform, new Vector2(0.05f, 0.02f), new Vector2(0.6f, 0.10f));
 
-            CreateActionButton(marketingPanel.transform, "Go Tat Ca", new Vector2(0.65f, 0.03f), new Vector2(0.78f, 0.09f), ClearPole);
-            CreateActionButton(marketingPanel.transform, "Dong", new Vector2(0.82f, 0.03f), new Vector2(0.95f, 0.09f), CloseMarketingPanel);
+            CreateActionButton(marketingPanel.transform, "Gỡ Tất Cả", new Vector2(0.65f, 0.03f), new Vector2(0.78f, 0.09f), ClearPole);
+            CreateActionButton(marketingPanel.transform, "Đóng", new Vector2(0.82f, 0.03f), new Vector2(0.95f, 0.09f), CloseMarketingPanel);
             marketingPanel.SetActive(false);
 
             // Dialogue Panel (Visual Novel style at the bottom center)
@@ -350,10 +437,92 @@ namespace ChoNoi.UI
             // Bổ sung các Panel giao dịch phụ
             BuildTradeQuantityPanel(canvasObject.transform);
             BuildBoatYardPanel(canvasObject.transform);
+
+            BuildSplashAndHome(canvasObject.transform);
         }
 
-        private void ToggleTutorial() => tutorialPanel.SetActive(!tutorialPanel.activeSelf);
-        private void ToggleSettings() => settingsPanel.SetActive(!settingsPanel.activeSelf);
+        private void ToggleTutorial()
+        {
+            if (tutorialPanel == null) return;
+            bool active = !tutorialPanel.activeSelf;
+            tutorialPanel.SetActive(active);
+            if (active)
+            {
+                tutorialPanel.transform.SetAsLastSibling();
+                SoundManager.Instance.PlaySFX("settings");
+            }
+            else
+            {
+                SoundManager.Instance.PlaySFX("back");
+            }
+            UpdateCursorState();
+        }
+
+        private void ToggleSettings()
+        {
+            if (settingsPanel == null) return;
+            bool active = !settingsPanel.activeSelf;
+            settingsPanel.SetActive(active);
+            if (active)
+            {
+                settingsPanel.transform.SetAsLastSibling();
+                SoundManager.Instance.PlaySFX("settings");
+            }
+            else
+            {
+                SoundManager.Instance.PlaySFX("back");
+                if (wasOpenedFromPause)
+                {
+                    wasOpenedFromPause = false;
+                    if (pausePanel != null)
+                    {
+                        pausePanel.SetActive(true);
+                        pausePanel.transform.SetAsLastSibling();
+                    }
+                }
+            }
+            UpdateCursorState();
+        }
+
+        private void TogglePause()
+        {
+            if (pausePanel == null) return;
+            bool active = !pausePanel.activeSelf;
+            pausePanel.SetActive(active);
+            if (active)
+            {
+                pausePanel.transform.SetAsLastSibling();
+                SoundManager.Instance.PlaySFX("pause");
+            }
+            else
+            {
+                SoundManager.Instance.PlaySFX("back");
+            }
+            Time.timeScale = active ? 0f : 1f;
+            UpdateCursorState();
+        }
+
+        private void OpenSettingsFromPause()
+        {
+            if (pausePanel != null) pausePanel.SetActive(false);
+            wasOpenedFromPause = true;
+            if (settingsPanel != null)
+            {
+                settingsPanel.SetActive(true);
+                settingsPanel.transform.SetAsLastSibling();
+            }
+            SoundManager.Instance.PlaySFX("settings");
+            UpdateCursorState();
+        }
+
+        private void QuitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            UnityEngine.Application.Quit();
+#endif
+        }
 
         private void SetCargoTab(int tab)
         {
@@ -366,16 +535,10 @@ namespace ChoNoi.UI
             if (marketingPanel == null) return;
             marketingPanel.SetActive(!marketingPanel.activeSelf);
             
-            var boarding = FindAnyObjectByType<BoatBoardingController>();
             if (marketingPanel.activeSelf)
             {
                 activeCargoTab = 0;
                 RefreshMarketing();
-                Cursor.visible = true;
-                Cursor.lockState = CursorLockMode.None;
-
-                if (boarding != null && boarding.IsBoarded)
-                    boarding.SetBoatControlActive(false);
             }
             else
             {
@@ -384,9 +547,8 @@ namespace ChoNoi.UI
                     Destroy(activeDragObject);
                     activeDragObject = null;
                 }
-                if (boarding != null && boarding.IsBoarded)
-                    boarding.SetBoatControlActive(true);
             }
+            UpdateCursorState();
         }
 
         public void OpenMarketingPanel()
@@ -422,10 +584,10 @@ namespace ChoNoi.UI
 
             if (tabButton1 != null && tabButton2 != null)
             {
-                tabButton1.GetComponent<Image>().color = activeCargoTab == 0 ? new Color(0.86f, 0.73f, 0.46f, 1f) : new Color(0.2f, 0.4f, 0.6f, 1f);
+                tabButton1.GetComponent<Graphic>().color = activeCargoTab == 0 ? new Color(0.86f, 0.73f, 0.46f, 1f) : new Color(0.2f, 0.4f, 0.6f, 1f);
                 tabButton1.transform.Find("Label").GetComponent<Text>().color = activeCargoTab == 0 ? Color.black : Color.white;
 
-                tabButton2.GetComponent<Image>().color = activeCargoTab == 1 ? new Color(0.86f, 0.73f, 0.46f, 1f) : new Color(0.2f, 0.4f, 0.6f, 1f);
+                tabButton2.GetComponent<Graphic>().color = activeCargoTab == 1 ? new Color(0.86f, 0.73f, 0.46f, 1f) : new Color(0.2f, 0.4f, 0.6f, 1f);
                 tabButton2.transform.Find("Label").GetComponent<Text>().color = activeCargoTab == 1 ? Color.black : Color.white;
             }
 
@@ -473,7 +635,7 @@ namespace ChoNoi.UI
 
                     if (selectedCargoSlotIndex == index)
                     {
-                        slotObj.GetComponent<Image>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
+                        slotObj.GetComponent<Graphic>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
                     }
 
                     Text text = CreateText("Label", slotObj.transform, 16, TextAnchor.MiddleCenter);
@@ -517,7 +679,7 @@ namespace ChoNoi.UI
 
                     if (selectedCargoSlotIndex == index)
                     {
-                        slotObj.GetComponent<Image>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
+                        slotObj.GetComponent<Graphic>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
                     }
 
                     Text text = CreateText("Label", slotObj.transform, 14, TextAnchor.MiddleCenter);
@@ -721,6 +883,7 @@ namespace ChoNoi.UI
             
             // Clean up choice buttons
             ClearChoicePanel();
+            UpdateCursorState();
         }
 
         private void ClearChoicePanel()
@@ -1285,7 +1448,7 @@ namespace ChoNoi.UI
             if (interactor != null && interactor.CurrentTarget != null)
             {
                 showLeft = true;
-                leftText = $"[E] Tuong tac:\n{interactor.CurrentTarget.NpcDisplayName}";
+                leftText = $"[E] Tương tác:\n{interactor.CurrentTarget.NpcDisplayName}";
             }
             else if (boarding != null)
             {
@@ -1294,7 +1457,7 @@ namespace ChoNoi.UI
                     if (boarding.CanDismountBoat)
                     {
                         showLeft = true;
-                        leftText = "[E] Roi ghe\n(Den diem bo)";
+                        leftText = "[E] Rời ghe\n(Đến điểm bờ)";
                     }
                 }
                 else
@@ -1302,7 +1465,7 @@ namespace ChoNoi.UI
                     if (boarding.CanBoardBoat)
                     {
                         showLeft = true;
-                        leftText = "[E] Len ghe";
+                        leftText = "[E] Lên ghe";
                     }
                 }
             }
@@ -1323,8 +1486,7 @@ namespace ChoNoi.UI
                 rightPromptPanel.SetActive(showRight);
                 if (showRight && rightPromptText != null)
                 {
-                    rightPromptText.text = "[B] Lieu dinh\nCay Beo"; // wait, the prompt text says "Dieu chinh", let's make sure it's correct
-                    rightPromptText.text = "[B] Dieu chinh\nCay Beo";
+                    rightPromptText.text = "[B] Điều chỉnh\nCây Bẹo";
                 }
             }
         }
@@ -1341,9 +1503,28 @@ namespace ChoNoi.UI
 
         private GameObject CreatePanel(string name, Transform parent, Color color)
         {
-            GameObject panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            panel.GetComponent<Image>().color = color;
+            bool useSVG = (name != "LeftPromptPanel" && name != "RightPromptPanel" && 
+                           name != "Background" && name != "Fill" && name != "Bg" && 
+                           !name.Contains("Slider") && !name.Contains("Scroll") && !name.Contains("Logo"));
+
+            GameObject panel;
+            Sprite sp = GetPanelBackgroundSprite();
+            if (useSVG && sp != null)
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                Image img = panel.GetComponent<Image>();
+                img.sprite = sp;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+            }
+            else
+            {
+                panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+                panel.transform.SetParent(parent, false);
+                panel.GetComponent<Image>().color = color;
+            }
+
             return panel;
         }
 
@@ -1352,7 +1533,7 @@ namespace ChoNoi.UI
             GameObject textObject = new GameObject(name, typeof(RectTransform), typeof(Text));
             textObject.transform.SetParent(parent, false);
             Text text = textObject.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = FontHelper.GameFont;
             text.fontSize = fontSize;
             text.alignment = alignment;
             text.color = Color.white;
@@ -1372,17 +1553,67 @@ namespace ChoNoi.UI
 
         private Button CreateActionButton(Transform parent, string label, Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction onClick)
         {
-            GameObject buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonObject.transform.SetParent(parent, false);
-            Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
-            buttonObject.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.6f, 1f);
-            Button button = buttonObject.GetComponent<Button>();
-            button.onClick.AddListener(onClick);
+            GameObject buttonObject;
+            if (buttonSpriteNormal != null)
+            {
+                buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
+                Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
+
+                Image img = buttonObject.GetComponent<Image>();
+                img.sprite = buttonSpriteNormal;
+                img.type = Image.Type.Sliced;
+                img.color = Color.white;
+
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = img;
+                button.transition = Selectable.Transition.SpriteSwap;
+                SpriteState state = new SpriteState();
+                state.highlightedSprite = buttonSpriteHover != null ? buttonSpriteHover : buttonSpriteNormal;
+                state.pressedSprite = buttonSpritePressed != null ? buttonSpritePressed : buttonSpriteNormal;
+                button.spriteState = state;
+            }
+            else
+            {
+                buttonObject = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(parent, false);
+                Stretch(buttonObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
+
+                Image img = buttonObject.GetComponent<Image>();
+                img.color = new Color(0.88f, 0.71f, 0.34f, 1f);
+
+                Button button = buttonObject.GetComponent<Button>();
+                button.targetGraphic = img;
+            }
+
+            Button btnComp = buttonObject.GetComponent<Button>();
+            if (onClick != null)
+            {
+                btnComp.onClick.RemoveAllListeners();
+                btnComp.onClick.AddListener(onClick);
+            }
 
             Text text = CreateText("Label", buttonObject.transform, 20, TextAnchor.MiddleCenter);
-            text.text = label;
             Stretch(text.rectTransform, Vector2.zero, Vector2.one);
-            return button;
+            text.font = FontHelper.GameBoldFont;
+            text.text = label;
+            text.color = Color.white;
+
+            btnComp.onClick.AddListener(() => {
+                SoundManager.Instance.PlaySFX("click");
+            });
+
+            EventTrigger trigger = buttonObject.GetComponent<EventTrigger>();
+            if (trigger == null) trigger = buttonObject.AddComponent<EventTrigger>();
+            
+            EventTrigger.Entry entry = new EventTrigger.Entry();
+            entry.eventID = EventTriggerType.PointerEnter;
+            entry.callback.AddListener((data) => {
+                SoundManager.Instance.PlaySFX("hover");
+            });
+            trigger.triggers.Add(entry);
+
+            return btnComp;
         }
 
         private void Stretch(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax)
@@ -1421,7 +1652,7 @@ namespace ChoNoi.UI
             ph.transform.SetParent(inputObj.transform, false);
             Text phText = ph.GetComponent<Text>();
             phText.text = "Nhập...";
-            phText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            phText.font = FontHelper.GameFont;
             phText.fontSize = 18;
             phText.alignment = TextAnchor.MiddleCenter;
             phText.color = Color.gray;
@@ -1430,7 +1661,7 @@ namespace ChoNoi.UI
             GameObject txtObj = new GameObject("Text", typeof(RectTransform), typeof(Text));
             txtObj.transform.SetParent(inputObj.transform, false);
             Text valText = txtObj.GetComponent<Text>();
-            valText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            valText.font = FontHelper.GameFont;
             valText.fontSize = 20;
             valText.alignment = TextAnchor.MiddleCenter;
             valText.color = Color.white;
@@ -1465,10 +1696,10 @@ namespace ChoNoi.UI
             Stretch(tradeSummaryText.rectTransform, new Vector2(0.05f, 0.14f), new Vector2(0.95f, 0.30f));
 
             tradeConfirmButton = CreateActionButton(tradeQuantityPanel.transform, "XÁC NHẬN", new Vector2(0.15f, 0.04f), new Vector2(0.48f, 0.12f), ConfirmTrade);
-            tradeConfirmButton.GetComponent<Image>().color = new Color(0.18f, 0.38f, 0.22f, 1f);
+            tradeConfirmButton.GetComponent<Graphic>().color = new Color(0.18f, 0.38f, 0.22f, 1f);
             
             tradeCancelButton = CreateActionButton(tradeQuantityPanel.transform, "HỦY", new Vector2(0.52f, 0.04f), new Vector2(0.85f, 0.12f), CancelTrade);
-            tradeCancelButton.GetComponent<Image>().color = new Color(0.5f, 0.15f, 0.15f, 1f);
+            tradeCancelButton.GetComponent<Graphic>().color = new Color(0.5f, 0.15f, 0.15f, 1f);
 
             tradeQuantityPanel.SetActive(false);
         }
@@ -1804,7 +2035,7 @@ namespace ChoNoi.UI
             yardDurabilitySlider.fillRect = dSliderFill.GetComponent<RectTransform>();
 
             yardRepairButton = CreateActionButton(repairPanel.transform, "SỬA CHỮA GHE", new Vector2(0.60f, 0.20f), new Vector2(0.94f, 0.80f), YardRepairBoat);
-            yardRepairButton.GetComponent<Image>().color = new Color(0.18f, 0.38f, 0.22f, 1f);
+            yardRepairButton.GetComponent<Graphic>().color = new Color(0.18f, 0.38f, 0.22f, 1f);
 
             GameObject upgradesSection = CreatePanel("UpgradesSection", boatYardPanel.transform, new Color(0.04f, 0.06f, 0.08f, 0.9f));
             Stretch(upgradesSection.GetComponent<RectTransform>(), new Vector2(0.05f, 0.14f), new Vector2(0.95f, 0.60f));
@@ -2030,6 +2261,457 @@ namespace ChoNoi.UI
             {
                 timeManager.OnDayChanged -= HandleDayChanged;
             }
+        }
+
+        private void BuildSplashAndHome(Transform parent)
+        {
+            // Splash Panel
+            splashPanel = CreatePanel("SplashPanel", parent, new Color(0.02f, 0.02f, 0.05f, 1f));
+            Stretch(splashPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            
+            // Temporary logo placeholder
+            GameObject logo = CreatePanel("LogoPlaceholder", splashPanel.transform, new Color(0.85f, 0.65f, 0.25f, 1f));
+            Stretch(logo.GetComponent<RectTransform>(), new Vector2(0.4f, 0.45f), new Vector2(0.6f, 0.7f));
+            
+            Text logoText = CreateText("LogoText", logo.transform, 24, TextAnchor.MiddleCenter);
+            logoText.text = "[ LOGO GAME ]";
+            logoText.color = Color.black;
+            Stretch(logoText.rectTransform, Vector2.zero, Vector2.one);
+            
+            Text gameTitle = CreateText("GameTitle", splashPanel.transform, 48, TextAnchor.MiddleCenter);
+            gameTitle.text = "CHỢ NỔI MIỀN TÂY";
+            gameTitle.color = new Color(0.92f, 0.82f, 0.55f, 1f);
+            Stretch(gameTitle.rectTransform, new Vector2(0.2f, 0.25f), new Vector2(0.8f, 0.40f));
+            
+            Text startHint = CreateText("StartHint", splashPanel.transform, 20, TextAnchor.MiddleCenter);
+            startHint.name = "StartHint";
+            startHint.text = "Đang tải dữ liệu...";
+            Stretch(startHint.rectTransform, new Vector2(0.2f, 0.10f), new Vector2(0.8f, 0.20f));
+
+            // Home Panel (Main Menu)
+            homePanel = CreatePanel("HomePanel", parent, new Color(0.08f, 0.12f, 0.14f, 1f));
+            Stretch(homePanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+
+            Text homeTitle = CreateText("HomeTitle", homePanel.transform, 56, TextAnchor.MiddleCenter);
+            homeTitle.text = "CHỢ NỔI MIỀN TÂY";
+            homeTitle.color = new Color(0.92f, 0.82f, 0.55f, 1f);
+            Stretch(homeTitle.rectTransform, new Vector2(0.2f, 0.65f), new Vector2(0.8f, 0.85f));
+
+            CreateActionButton(homePanel.transform, "Chơi Mới", new Vector2(0.38f, 0.45f), new Vector2(0.62f, 0.53f), ClickNewGame);
+            
+            var saveManager = FindAnyObjectByType<ChoNoi.Infrastructure.SaveLoadManager>();
+            bool hasSave = saveManager != null && saveManager.HasSaveFile;
+            var continueBtn = CreateActionButton(homePanel.transform, "Tiếp Tục", new Vector2(0.38f, 0.34f), new Vector2(0.62f, 0.42f), ClickContinue);
+            if (!hasSave)
+            {
+                continueBtn.interactable = false;
+                continueBtn.GetComponent<Graphic>().color = new Color(0.3f, 0.3f, 0.3f, 0.5f);
+                continueBtn.transform.Find("Label").GetComponent<Text>().color = Color.gray;
+            }
+
+            CreateActionButton(homePanel.transform, "Cài Đặt", new Vector2(0.38f, 0.23f), new Vector2(0.62f, 0.31f), ToggleSettings);
+
+            CreateActionButton(homePanel.transform, "Thoát", new Vector2(0.38f, 0.12f), new Vector2(0.62f, 0.20f), QuitGame);
+
+            homePanel.SetActive(false);
+            splashPanel.SetActive(true);
+            
+            SetGameplayUiActive(false);
+            Time.timeScale = 0f;
+            UpdateCursorState();
+            StartCoroutine(SplashSequence());
+        }
+
+        private System.Collections.IEnumerator SplashSequence()
+        {
+            float elapsed = 0f;
+            Text startHint = null;
+            if (splashPanel != null)
+            {
+                var tr = splashPanel.transform.Find("StartHint");
+                if (tr != null) startHint = tr.GetComponent<Text>();
+            }
+            
+            while (elapsed < 2.5f)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            
+            if (startHint != null) startHint.text = "Nhấp chuột để bắt đầu";
+            
+            bool clicked = false;
+            while (!clicked)
+            {
+                if ((UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame) ||
+                    (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.anyKey.wasPressedThisFrame))
+                {
+                    clicked = true;
+                }
+                yield return null;
+            }
+
+            if (splashPanel != null) splashPanel.SetActive(false);
+            if (homePanel != null) homePanel.SetActive(true);
+            UpdateCursorState();
+        }
+
+        private void ClickNewGame()
+        {
+            var boarding = FindAnyObjectByType<BoatBoardingController>();
+            if (boarding != null)
+            {
+                boarding.ResetToStartingState(
+                    new Vector3(92f, 4.25f, 25f),
+                    Quaternion.Euler(0f, 80f, 0f),
+                    new Vector3(118f, 3.75f, 34f),
+                    Quaternion.identity
+                );
+            }
+
+            var saveManager = FindAnyObjectByType<ChoNoi.Infrastructure.SaveLoadManager>();
+            if (saveManager != null)
+            {
+                saveManager.NewGame();
+            }
+            isInGameplay = true;
+            StartGame();
+        }
+
+        private void ClickContinue()
+        {
+            if (!isInGameplay)
+            {
+                var saveManager = FindAnyObjectByType<ChoNoi.Infrastructure.SaveLoadManager>();
+                if (saveManager != null)
+                {
+                    saveManager.LoadGame();
+                }
+                isInGameplay = true;
+            }
+            StartGame();
+        }
+
+        private void StartGame()
+        {
+            if (homePanel != null) homePanel.SetActive(false);
+            
+            var playerController = FindAnyObjectByType<ShorePlayerController>();
+            if (playerController != null)
+                playerController.CanMove = true;
+
+            var boarding = FindAnyObjectByType<BoatBoardingController>();
+            if (boarding != null && boarding.IsBoarded)
+            {
+                boarding.SetBoatControlActive(true);
+            }
+            else if (playerController != null)
+            {
+                playerController.CanMove = true;
+            }
+
+            Time.timeScale = 1f;
+            UpdateCursorState();
+
+            SetGameplayUiActive(true);
+
+            if (riverMarketHUD != null)
+            {
+                riverMarketHUD.RefreshAll();
+            }
+        }
+
+        private void SetGameplayUiActive(bool active)
+        {
+            if (topTutorialButton != null) topTutorialButton.gameObject.SetActive(active);
+            if (topSettingsButton != null) topSettingsButton.gameObject.SetActive(active);
+            if (riverMarketHUD != null)
+            {
+                riverMarketHUD.SetCanvasActive(active);
+            }
+        }
+
+        private void ChangeVolume(float value)
+        {
+            soundVolume = value;
+            AudioListener.volume = soundVolume;
+            if (volumeLabelText != null)
+            {
+                volumeLabelText.text = currentLanguage == "vi"
+                    ? $"Âm Lượng: {Mathf.RoundToInt(soundVolume * 100f)}%"
+                    : $"Volume: {Mathf.RoundToInt(soundVolume * 100f)}%";
+            }
+        }
+
+        private void CycleGraphics()
+        {
+            graphicsQuality = (graphicsQuality + 1) % 3;
+            QualitySettings.SetQualityLevel(graphicsQuality == 0 ? 0 : (graphicsQuality == 1 ? 2 : 5), true);
+            UpdateGraphicsButtonText();
+            SoundManager.Instance.PlaySFX("click");
+        }
+
+        private void UpdateGraphicsButtonText()
+        {
+            if (graphicsSettingButton != null)
+            {
+                string levelStr = "CAO";
+                if (currentLanguage == "vi")
+                {
+                    if (graphicsQuality == 0) levelStr = "THẤP";
+                    else if (graphicsQuality == 1) levelStr = "TRUNG BÌNH";
+                }
+                else
+                {
+                    if (graphicsQuality == 0) levelStr = "LOW";
+                    else if (graphicsQuality == 1) levelStr = "MEDIUM";
+                    else levelStr = "HIGH";
+                }
+                
+                graphicsSettingButton.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi"
+                    ? $"Đồ Họa: {levelStr}"
+                    : $"Graphics: {levelStr}";
+            }
+        }
+
+        private void ToggleLanguage()
+        {
+            currentLanguage = currentLanguage == "vi" ? "en" : "vi";
+            UpdateLanguageButtonText();
+            ApplyLanguageSettings();
+            SoundManager.Instance.PlaySFX("click");
+        }
+
+        private void UpdateLanguageButtonText()
+        {
+            if (languageSettingButton != null)
+            {
+                string langStr = currentLanguage == "vi" ? "TIẾNG VIỆT" : "ENGLISH";
+                languageSettingButton.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi"
+                    ? $"Ngôn Ngữ: {langStr}"
+                    : $"Language: {langStr}";
+            }
+        }
+
+        private void ApplyLanguageSettings()
+        {
+            TranslateGameUI();
+            if (riverMarketHUD != null)
+            {
+                riverMarketHUD.RefreshAll();
+            }
+        }
+
+        private void TranslateGameUI()
+        {
+            CurrentLanguage = currentLanguage;
+
+            if (settingsPanel != null)
+            {
+                Transform title = settingsPanel.transform.Find("Title");
+                if (title != null) title.GetComponent<Text>().text = currentLanguage == "vi" ? "CÀI ĐẶT" : "SETTINGS";
+                
+                if (volumeLabelText != null)
+                {
+                    volumeLabelText.text = currentLanguage == "vi"
+                        ? $"Âm Lượng: {Mathf.RoundToInt(soundVolume * 100f)}%"
+                        : $"Volume: {Mathf.RoundToInt(soundVolume * 100f)}%";
+                }
+                UpdateGraphicsButtonText();
+                UpdateLanguageButtonText();
+                
+                Transform closeBtn = settingsPanel.transform.Find("Đóng");
+                if (closeBtn == null) closeBtn = settingsPanel.transform.Find("Close");
+                if (closeBtn != null)
+                {
+                    closeBtn.name = currentLanguage == "vi" ? "Đóng" : "Close";
+                    closeBtn.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi" ? "Đóng" : "Close";
+                }
+            }
+
+            if (pausePanel != null)
+            {
+                Transform title = pausePanel.transform.Find("Title");
+                if (title != null) title.GetComponent<Text>().text = currentLanguage == "vi" ? "TẠM DỪNG" : "PAUSED";
+
+                string[] viLabels = { "Tiếp Tục", "Cài Đặt", "Quay Lại Trang Chủ", "Thoát Game" };
+                string[] enLabels = { "Resume", "Settings", "Main Menu", "Quit Game" };
+
+                for (int i = 0; i < viLabels.Length; i++)
+                {
+                    Transform btn = pausePanel.transform.Find(viLabels[i]);
+                    if (btn == null) btn = pausePanel.transform.Find(enLabels[i]);
+                    if (btn != null)
+                    {
+                        btn.name = currentLanguage == "vi" ? viLabels[i] : enLabels[i];
+                        btn.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi" ? viLabels[i] : enLabels[i];
+                    }
+                }
+            }
+
+            if (tutorialPanel != null)
+            {
+                Transform title = tutorialPanel.transform.Find("Title");
+                if (title != null) title.GetComponent<Text>().text = currentLanguage == "vi" ? "HƯỚNG DẪN CHƠI" : "HOW TO PLAY";
+                
+                Transform body = tutorialPanel.transform.Find("Body");
+                if (body != null)
+                {
+                    body.GetComponent<Text>().text = currentLanguage == "vi"
+                        ? "1. Bình Minh (3AM - 10AM): Lái ghe ra chợ, treo hàng lên Cây Bẹo để bán lẻ/sỉ.\n\n" +
+                          "2. Trả Giá: Sử dụng thể lực để Nói Ngọt hoặc tốn hàng để Tặng Quà nâng thiện cảm.\n\n" +
+                          "3. Chiều Tà (1PM - 6PM): Vào rạch nhỏ thu mua nông sản giá gốc hoặc về Trại Ghe.\n\n" +
+                          "4. Nâng Cấp: Mở rộng khoang chứa, nâng cấp động cơ và lắp mái che."
+                        : "1. Dawn (3AM - 10AM): Sail your boat to the market, hang crops on the Bamboo Pole to sell.\n\n" +
+                          "2. Bargain: Spend stamina to Sweet Talk or give items as Gifts to raise affinity.\n\n" +
+                          "3. Dusk (1PM - 6PM): Enter small canals to buy raw goods or return to the Boat Yard.\n\n" +
+                          "4. Upgrade: Expand cargo storage, upgrade engines, and install roofs.";
+                }
+
+                Transform closeBtn = tutorialPanel.transform.Find("Đóng");
+                if (closeBtn == null) closeBtn = tutorialPanel.transform.Find("Close");
+                if (closeBtn != null)
+                {
+                    closeBtn.name = currentLanguage == "vi" ? "Đóng" : "Close";
+                    closeBtn.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi" ? "Đóng" : "Close";
+                }
+            }
+
+            if (marketingPanel != null)
+            {
+                Transform title = marketingPanel.transform.Find("Title");
+                if (title != null) title.GetComponent<Text>().text = currentLanguage == "vi" ? "QUẢN LÝ KHOANG THUYỀN & CÂY BẸO" : "CARGO & BAMBOO POLE";
+
+                if (tabButton1 != null) tabButton1.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi" ? "KHOANG THUYỀN" : "CARGO BAY";
+                if (tabButton2 != null) tabButton2.transform.Find("Label").GetComponent<Text>().text = currentLanguage == "vi" ? "CÂY BẸO" : "BAMBOO POLE";
+            }
+        }
+
+        private Slider CreateSlider(Transform parent, float min, float max, float current, Vector2 anchorMin, Vector2 anchorMax, UnityEngine.Events.UnityAction<float> onValueChanged)
+        {
+            GameObject sliderObject = new GameObject("Slider", typeof(RectTransform), typeof(Slider));
+            sliderObject.transform.SetParent(parent, false);
+            Stretch(sliderObject.GetComponent<RectTransform>(), anchorMin, anchorMax);
+            Slider slider = sliderObject.GetComponent<Slider>();
+
+            GameObject bgObject = new GameObject("Background", typeof(RectTransform), typeof(Image));
+            bgObject.transform.SetParent(sliderObject.transform, false);
+            Stretch(bgObject.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            bgObject.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 1f);
+
+            GameObject fillArea = new GameObject("Fill Area", typeof(RectTransform));
+            fillArea.transform.SetParent(sliderObject.transform, false);
+            Stretch(fillArea.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+
+            GameObject fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(fillArea.transform, false);
+            Stretch(fill.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+            fill.GetComponent<Image>().color = new Color(0.88f, 0.71f, 0.34f, 1f);
+
+            GameObject handleArea = new GameObject("Handle Slide Area", typeof(RectTransform));
+            handleArea.transform.SetParent(sliderObject.transform, false);
+            Stretch(handleArea.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
+
+            GameObject handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+            handle.transform.SetParent(handleArea.transform, false);
+            RectTransform handleRect = handle.GetComponent<RectTransform>();
+            handleRect.anchorMin = new Vector2(0f, 0f);
+            handleRect.anchorMax = new Vector2(0f, 1f);
+            handleRect.pivot = new Vector2(0.5f, 0.5f);
+            handleRect.sizeDelta = new Vector2(20f, 0f);
+            handle.GetComponent<Image>().color = Color.white;
+
+            slider.fillRect = fill.GetComponent<RectTransform>();
+            slider.handleRect = handleRect;
+            slider.targetGraphic = handle.GetComponent<Image>();
+            slider.minValue = min;
+            slider.maxValue = max;
+            slider.value = current;
+            slider.onValueChanged.AddListener(onValueChanged);
+
+            return slider;
+        }
+
+        public void UpdateCursorState()
+        {
+            bool needsCursor = (pausePanel != null && pausePanel.activeSelf) ||
+                               (splashPanel != null && splashPanel.activeSelf) ||
+                               (homePanel != null && homePanel.activeSelf) ||
+                               (settingsPanel != null && settingsPanel.activeSelf) ||
+                               (tutorialPanel != null && tutorialPanel.activeSelf) ||
+                               (marketingPanel != null && marketingPanel.activeSelf) ||
+                               (dialoguePanel != null && dialoguePanel.activeSelf) ||
+                               (tradeQuantityPanel != null && tradeQuantityPanel.activeSelf) ||
+                               (boatYardPanel != null && boatYardPanel.activeSelf);
+            
+            Cursor.visible = needsCursor;
+            Cursor.lockState = needsCursor ? CursorLockMode.None : CursorLockMode.Locked;
+            
+            var boarding = FindAnyObjectByType<BoatBoardingController>();
+            var playerController = FindAnyObjectByType<ShorePlayerController>();
+            
+            if (needsCursor)
+            {
+                if (boarding != null) boarding.SetBoatControlActive(false);
+                if (playerController != null) playerController.CanMove = false;
+            }
+            else
+            {
+                if (Time.timeScale > 0.1f)
+                {
+                    if (boarding != null && boarding.IsBoarded)
+                    {
+                        boarding.SetBoatControlActive(true);
+                    }
+                    else if (playerController != null)
+                    {
+                        playerController.CanMove = true;
+                    }
+                }
+            }
+        }
+
+        private void ReturnToHome()
+        {
+            if (pausePanel != null) pausePanel.SetActive(false);
+            if (settingsPanel != null) settingsPanel.SetActive(false);
+            if (tutorialPanel != null) tutorialPanel.SetActive(false);
+            if (marketingPanel != null) marketingPanel.SetActive(false);
+            if (dialoguePanel != null) dialoguePanel.SetActive(false);
+            if (tradeQuantityPanel != null) tradeQuantityPanel.SetActive(false);
+            if (boatYardPanel != null) boatYardPanel.SetActive(false);
+            
+            if (homePanel != null) homePanel.SetActive(true);
+            SetGameplayUiActive(false);
+            
+            Time.timeScale = 0f;
+            SoundManager.Instance.PlaySFX("back");
+
+            var saveManager = FindAnyObjectByType<ChoNoi.Infrastructure.SaveLoadManager>();
+            bool hasSave = saveManager != null && saveManager.HasSaveFile;
+            Transform continueBtnTr = homePanel.transform.Find("Tiếp Tục");
+            if (continueBtnTr != null)
+            {
+                Button continueBtn = continueBtnTr.GetComponent<Button>();
+                if (continueBtn != null)
+                {
+                    continueBtn.interactable = hasSave;
+                    continueBtn.GetComponent<Graphic>().color = hasSave ? Color.white : new Color(0.3f, 0.3f, 0.3f, 0.5f);
+                    Transform labelTr = continueBtn.transform.Find("Label");
+                    if (labelTr != null)
+                    {
+                        Text lbl = labelTr.GetComponent<Text>();
+                        if (lbl != null) lbl.color = hasSave ? Color.white : Color.gray;
+                    }
+                }
+            }
+            
+            UpdateCursorState();
+        }
+
+        private Sprite GetPanelBackgroundSprite()
+        {
+            return panelBgSprite;
         }
     }
 

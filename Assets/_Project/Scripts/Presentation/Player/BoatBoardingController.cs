@@ -149,6 +149,46 @@ namespace ChoNoi.Presentation.Player
             if (cc != null)
                 cc.enabled = true;
         }
+        public void ResetToStartingState(Vector3 playerStartPos, Quaternion playerStartRot, Vector3 boatStartPos, Quaternion boatStartRot)
+        {
+            isBoarded = false;
+            transform.SetParent(null, true);
+
+            CharacterController cc = GetComponent<CharacterController>();
+            if (cc != null)
+                cc.enabled = false;
+
+            transform.position = playerStartPos;
+            transform.rotation = playerStartRot;
+
+            if (playerVisualRoot != null)
+                playerVisualRoot.gameObject.SetActive(true);
+
+            if (playerController != null)
+                playerController.CanMove = true;
+
+            SetBoatControl(false);
+
+            if (boat != null)
+            {
+                boat.position = boatStartPos;
+                boat.rotation = boatStartRot;
+                Rigidbody boatRb = boat.GetComponent<Rigidbody>();
+                if (boatRb != null)
+                {
+                    boatRb.linearVelocity = Vector3.zero;
+                    boatRb.angularVelocity = Vector3.zero;
+                }
+            }
+
+            if (followCamera != null)
+            {
+                followCamera.Configure(transform);
+            }
+
+            if (cc != null)
+                cc.enabled = true;
+        }
 
         private void SetBoatControl(bool enabled)
         {

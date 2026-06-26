@@ -13,6 +13,12 @@ namespace ChoNoi.Presentation
         private Vector3 startPosition;
         private Quaternion startRotation;
 
+        public Vector3 StartPosition
+        {
+            get => startPosition;
+            set => startPosition = value;
+        }
+
         private void Awake()
         {
             startPosition = transform.localPosition;
