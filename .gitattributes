@@ -172,8 +172,7 @@ LightingData.asset     binary
 
 
 # Pure Poly terrain assets are binary TerrainData, not Unity YAML.
-# Must be after "*.asset unity-yaml" so this rule overrides it.
-"Assets/Pure Poly/Free Low Poly Nature Pack/Terrain/*.asset" filter=lfs diff=lfs merge=lfs -text !eol !linguist-language
+Assets/Pure Poly/Free Low Poly Nature Pack/Terrain/*.asset filter=lfs diff=lfs merge=lfs -text
 
 # Optional: if the package has other binary .asset files under Pure Poly, keep them binary too.
-"Assets/Pure Poly/**/*.asset" filter=lfs diff=lfs merge=lfs -text !eol !linguist-language
+Assets/Pure Poly/**/*.asset filter=lfs diff=lfs merge=lfs -text
