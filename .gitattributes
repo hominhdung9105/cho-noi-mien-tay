@@ -1,3 +1,4 @@
 Assets/Pure\ Poly/Free\ Low\ Poly\ Nature\ Pack/Terrain/*.asset filter=lfs diff=lfs merge=lfs -text
 Assets/Pure\ Poly/**/*.asset filter=lfs diff=lfs merge=lfs -text
+Assets/**/Terrain.asset filter=lfs diff=lfs merge=lfs -text
 Assets/Pure[[:space:]]Poly/Free[[:space:]]Low[[:space:]]Poly[[:space:]]Nature[[:space:]]Pack/Terrain/Terrain.asset filter=lfs diff=lfs merge=lfs -text
